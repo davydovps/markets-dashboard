@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Портфель — живая сводка</title>
+<style>
+:root {
+  --bg:#f5f6f4; --surface:#fcfcfb; --ink:#141816; --ink2:#525955; --muted:#878c88; --grid:#e2e4df; --axis:#c4c7c1;
+  --accent:#1f6f66; --accent-ink:#155a53; --border:rgba(20,24,22,.10);
+  --pos:#0a6b0a; --pos-bg:rgba(10,131,10,.10); --neg:#b3261e; --neg-bg:rgba(211,59,59,.10); --fx:#c9560f; color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#0f1110; --surface:#1a1c1a; --ink:#f3f4f1; --ink2:#c1c5bf; --muted:#8a8f8a; --grid:#2c2f2c; --axis:#3a3e3a;
+  --accent:#4fb3a6; --accent-ink:#7fd0c5; --border:rgba(255,255,255,.10);
+  --pos:#4fd24f; --pos-bg:rgba(79,210,79,.12); --neg:#ff8a80; --neg-bg:rgba(255,138,128,.12); --fx:#f0955a; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg:#0f1110; --surface:#1a1c1a; --ink:#f3f4f1; --ink2:#c1c5bf; --muted:#8a8f8a; --grid:#2c2f2c; --axis:#3a3e3a;
+  --accent:#4fb3a6; --accent-ink:#7fd0c5; --border:rgba(255,255,255,.10);
+  --pos:#4fd24f; --pos-bg:rgba(79,210,79,.12); --neg:#ff8a80; --neg-bg:rgba(255,138,128,.12); --fx:#f0955a; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 24px 16px 60px; }
+h1 { font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-weight: 500; font-size: 1.7rem; margin: 0 0 4px; letter-spacing:-.01em; }
+.sub { color: var(--muted); font-size:.85rem; }
+.top { display:flex; flex-wrap:wrap; gap: 12px 24px; align-items:flex-end; justify-content:space-between; margin-bottom: 18px; }
+.tiles { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 10px; margin: 16px 0 18px; }
+.tile { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding: 12px 14px; }
+.tile .l { font-size:.78rem; color:var(--muted); }
+.tile .v { font-size:1.45rem; font-weight:600; margin-top:2px; white-space:nowrap; }
+.tile .d { font-size:.82rem; color:var(--ink2); }
+.controls { display:flex; gap: 8px; flex-wrap:wrap; align-items:center; }
+.seg { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; background:var(--surface); }
+.seg button { border:0; background:transparent; color:var(--ink2); padding: 8px 14px; font: inherit; cursor:pointer; }
+.seg button[aria-pressed="true"] { background:var(--accent); color:#fff; }
+.seg button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.btn { border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:6px; padding: 8px 14px; font: inherit; cursor:pointer; }
+.btn:hover { border-color: var(--accent); }
+.tw { background:var(--surface); border:1px solid var(--border); border-radius:6px; }
+table { border-collapse: collapse; width:100%; font-size:.82rem; table-layout: auto; }
+th, td { padding: 7px 6px; border-bottom: 1px solid var(--border); text-align:left; vertical-align: top; }
+td.name { white-space: normal; min-width: 130px; }
+td .s { font-size:.72rem; }
+td.name .s { white-space: normal; }
+th.num, td.num { white-space: nowrap; }
+th { font-weight:600; color: var(--ink2); font-size:.78rem; position: sticky; top:0; background: var(--surface); }
+th.num, td.num { text-align:right; font-variant-numeric: tabular-nums; }
+td .s { color: var(--muted); font-size:.76rem; }
+tr.tot td { font-weight:600; border-top: 2px solid var(--axis); border-bottom: 0; }
+td.delta { font-weight: 600; }
+td.pos { color: var(--pos); background: var(--pos-bg); }
+td.neg { color: var(--neg); background: var(--neg-bg); }
+td.flat { color: var(--ink2); }
+.status { font-size:.85rem; color: var(--muted); margin-top: 10px; min-height: 1.2em; }
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding: 12px 14px 6px; margin-bottom: 14px; }
+.chart-card .t { font-weight:600; font-size:.95rem; }
+.chart-card .s { color: var(--muted); font-size:.8rem; margin-bottom: 4px; }
+svg.chart { display:block; overflow:visible; width:100%; height:auto; }
+svg .grid { stroke: var(--grid); stroke-width:1; } svg .axis { stroke: var(--axis); stroke-width:1; }
+svg .tick { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+svg .endlab { font-size: 12px; fill: var(--ink); font-weight:600; font-variant-numeric: tabular-nums; }
+svg .ref { stroke: var(--muted); stroke-width:1; } svg .reflab { font-size: 11px; fill: var(--muted); }
+svg .line { fill:none; stroke: var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+svg .line2 { fill:none; stroke: var(--fx); stroke-width:1.5; stroke-linejoin:round; stroke-linecap:round; }
+svg .tick2 { font-size: 11px; fill: var(--fx); font-variant-numeric: tabular-nums; }
+.legend { display:flex; gap:16px; font-size:.8rem; color:var(--ink2); margin: 2px 0 4px; }
+.legend i { display:inline-block; width:14px; height:3px; border-radius:2px; vertical-align:middle; margin-right:6px; }
+svg .area { fill: var(--accent); opacity:.10; }
+.tip { position: fixed; pointer-events:none; background: var(--surface); border:1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size:.82rem; box-shadow: 0 4px 16px rgba(0,0,0,.15); display:none; z-index: 10; font-variant-numeric: tabular-nums; }
+.err { color: var(--neg); }
+.mark { color: var(--muted); font-size:.75rem; }
+@media (max-width: 900px) { table { font-size:.78rem; } th, td { padding: 6px 5px; } td .s { display:none; } .tw { overflow-x:auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="top">
+  <div>
+    <h1>Портфель — живая сводка</h1>
+    <div class="sub" id="asof">загрузка…</div>
+  </div>
+  <div class="controls">
+    <div class="seg" role="group" aria-label="База сравнения">
+      <button id="modeStart" aria-pressed="true">Δ к вложениям</button>
+      <button id="modeYday" aria-pressed="false">Δ ко вчера</button>
+    </div>
+    <label class="btn" style="display:inline-flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="withNkd" checked> НКД</label>
+    <button class="btn" id="refresh">Обновить</button>
+  </div>
+</div>
+
+<div class="tiles">
+  <div class="tile"><div class="l">Стоимость сейчас</div><div class="v" id="tVal">—</div><div class="d" id="tValUsd">—</div></div>
+  <div class="tile"><div class="l" id="tDeltaL">Δ к вложениям</div><div class="v" id="tDelta">—</div><div class="d" id="tDeltaSub">—</div></div>
+  <div class="tile"><div class="l">Купоны в месяц</div><div class="v" id="tCoup">—</div><div class="d" id="tCoupUsd">—</div></div>
+  <div class="tile"><div class="l">Курс ЦБ</div><div class="v" id="tFx">—</div><div class="d" id="tFxSub">—</div></div>
+  <div class="tile"><div class="l">Рынок (Yahoo USDRUB=X)</div><div class="v" id="tYh">—</div><div class="d" id="tYhSub">—</div></div>
+</div>
+
+<div class="chart-card" id="chartCard">
+  <div class="t">Стоимость портфеля, млн ₽ · курс ЦБ, ₽/$</div>
+  <div class="s" id="chartSub">с даты последней покупки · по закрытиям MOEX и курсу ЦБ (фиксинг USDFIXME)</div>
+  <div class="legend"><span><i style="background:var(--accent)"></i>стоимость портфеля, млн ₽ (левая ось)</span><span><i style="background:var(--fx)"></i>курс ЦБ, ₽/$ (правая ось)</span></div>
+  <div id="chart"><div class="sub">загружаю историю…</div></div>
+</div>
+<div class="tip" id="tip"></div>
+<div id="setup" class="tile" style="display:none;margin-bottom:14px">
+  <div class="l">Позиции не заданы</div>
+  <p class="sub" style="margin:6px 0 8px;max-width:80ch">Откройте страницу по ссылке с позициями (её печатает <code>python3 dashboard.py --link URL</code>) — они сохранятся в этом браузере. Или вставьте JSON из portfolio.json ниже.</p>
+  <textarea id="setupJson" rows="6" style="width:100%;font:12px ui-monospace,Menlo,monospace;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:4px;padding:8px" placeholder='{"positions":[{"secid":"RU000A0XXXXX","name":"Название выпуска","qty":10,"cost_rub":1000000,"bought":"2025-01-15"}]}'></textarea>
+  <div style="margin-top:8px;display:flex;gap:8px"><button class="btn" id="setupSave">Сохранить в этом браузере</button><button class="btn" id="setupClear">Очистить</button></div>
+</div>
+<div class="tw"><table id="tbl">
+<thead><tr>
+  <th>Бумага</th><th class="num">шт</th><th class="num">Цена</th>
+  <th class="num">Вложено</th><th class="num" id="hE">Получено купонов</th><th class="num" id="hV1">Сейчас, ₽</th><th class="num" id="hV2">Сейчас, $</th>
+  <th class="num" id="hD1">Δ ₽</th>
+  <th class="num">Купон / мес</th>
+</tr></thead>
+<tbody id="rows"><tr><td colspan="9" class="sub">Загружаю котировки MOEX и курс ЦБ…</td></tr></tbody>
+</table></div>
+<div class="status" id="status"></div>
+<p class="sub" style="max-width:80ch;margin-top:14px">Стоимость — по официальному курсу ЦБ, с НКД или без (галка «НКД» переключает колонки «Сейчас» и Δ);
+колонки «Сейчас» подсвечены относительно вложений всегда, независимо от режима Δ;
+цена — последняя сделка, если сегодня сделок нет — закрытие предыдущего дня (помечено *).
+«Δ ко вчера» — против закрытия предыдущего торгового дня по предыдущему курсу ЦБ.
+Купон/мес — среднемесячный эквивалент годового купона.
+«Получено купонов» — с даты покупки каждого лота: по календарю выплат MOEX, каждая выплата в рублях по курсу ЦБ на её дату; в подстроке — сумма в $, число выплат и % от вложений. От галки «НКД» и режима Δ не зависит.
+
+Рыночный курс — Yahoo Finance через публичный прокси allorigins (как в приложении «Акции» на iPhone), контроль — вечный фьючерс USDRUBF на MOEX.
+Δ $ к вложениям — вложения переведены в доллары по курсу ЦБ на дату покупки.
+Позиции — из portfolio.json (перегенерировать: python3 dashboard.py).</p>
+</div>
+
+<script>
+const EMBEDDED = null;   // локальная версия: позиции зашиты; публичная: null
+const LS_KEY = "markets.positions.v1";
+function normalize(list) {
+  return (list || []).map(p => ({secid: p.secid, name: p.name || p.secid, qty: +p.qty, cost_rub: p.cost_rub ?? null,
+    bought: p.bought || null, lots: (p.lots && p.lots.length) ? p.lots.map(l => ({date: l.date, qty: +l.qty})) : (p.bought ? [{date: p.bought, qty: +p.qty}] : [])}));
+}
+function fromHash() {
+  const m = location.hash.match(/[#&]p=([A-Za-z0-9_-]+)/); if (!m) return null;
+  try { const b = m[1].replace(/-/g,"+").replace(/_/g,"/"); const s = decodeURIComponent(escape(atob(b + "=".repeat((4 - b.length % 4) % 4))));
+        const j = JSON.parse(s); return normalize(Array.isArray(j) ? j : j.positions); } catch (e) { console.warn("bad #p", e); return null; }
+}
+function loadPositions() {
+  if (EMBEDDED) return normalize(EMBEDDED);
+  const h = fromHash(); if (h && h.length) { try { localStorage.setItem(LS_KEY, JSON.stringify(h)); } catch(e){} return h; }
+  try { const ls = JSON.parse(localStorage.getItem(LS_KEY) || "null"); if (ls && ls.length) return ls; } catch(e){}
+  return [];
+}
+let POSITIONS = loadPositions();
+const ISS = "https://iss.moex.com/iss";
+const CBR = "https://www.cbr-xml-daily.ru";
+const $ = id => document.getElementById(id);
+const nf0 = new Intl.NumberFormat("ru-RU", {maximumFractionDigits: 0});
+const nf2 = new Intl.NumberFormat("ru-RU", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const fmt = (n, d=0) => (n==null || isNaN(n)) ? "—" : (d ? nf2 : nf0).format(n);
+const sgn = (n, d=0) => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + fmt(n, d);
+const pct = n => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + n.toFixed(2) + "%";
+const short = s => s.replace("Газпром капитал","ГазКап").replace("ЕвразХолдинг Финанс","Евраз").replace("СИБУР Холдинг","СИБУР").replace("Акрон (ПАО)","Акрон").replace("ПОЛЮС","Полюс");
+
+let state = { mode: "start", withNkd: true, data: null };
+
+async function getJSON(url, timeoutMs = 20000, retries = 2) {
+  let lastErr;
+  for (let i = 0; i <= retries; i++) {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, {cache: "no-store", signal: ctl.signal});
+      if (!r.ok) throw new Error(url + " → HTTP " + r.status);
+      return await r.json();
+    } catch (e) { lastErr = e; await new Promise(res => setTimeout(res, 600 * (i + 1))); }
+    finally { clearTimeout(t); }
+  }
+  throw lastErr;
+}
+function rows(block) { const c = block.columns; return block.data.map(r => Object.fromEntries(c.map((k,i)=>[k, r[i]]))); }
+
+async function cbrOn(dateISO) {
+  // курс ЦБ, действующий на дату (архив cbr-xml-daily); если на дату нет — идём назад до 7 дней
+  let d = new Date(dateISO + "T12:00:00");
+  for (let i=0;i<8;i++) {
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), dd=String(d.getDate()).padStart(2,"0");
+    try { const j = await getJSON(`${CBR}/archive/${y}/${m}/${dd}/daily_json.js`); return j.Valute.USD.Value; } catch(e) {}
+    d.setDate(d.getDate()-1);
+  }
+  return null;
+}
+
+async function couponsReceived(p, cbrRates) {
+  // купоны по лотам: с даты покупки лота по сегодня; value_rub из ISS (по курсу ЦБ на дату выплаты) либо value*курс
+  if (!p.lots || !p.lots.length) return {rub:0, usd:0, n:0};
+  const j = await getJSON(`${ISS}/securities/${p.secid}/bondization.json?iss.meta=off&iss.only=coupons&coupons.columns=coupondate,value,value_rub&limit=300`);
+  const today = new Date().toISOString().slice(0,10);
+  let rub=0, usd=0; const dates = new Set();
+  for (const c of rows(j.coupons)) {
+    if (!c.coupondate || c.value==null || c.coupondate > today) continue;
+    for (const lot of p.lots) {
+      if (c.coupondate > lot.date) { usd += c.value * lot.qty; rub += (c.value_rub ?? c.value * cbrRates.today) * lot.qty; dates.add(c.coupondate); }
+    }
+  }
+  return {rub, usd, n: dates.size};
+}
+
+async function yahoo() {
+  const y = "https://query1.finance.yahoo.com/v8/finance/chart/USDRUB=X?interval=1d&range=1d";
+  try {
+    const j = await getJSON("https://api.allorigins.win/raw?url=" + encodeURIComponent(y), 12000);
+    const m = j.chart.result[0].meta;
+    return {price: m.regularMarketPrice, time: new Date(m.regularMarketTime*1000), prev: m.chartPreviousClose, src: "yahoo"};
+  } catch (e) { return null; }
+}
+async function moexPerp() {
+  try {
+    const j = await getJSON(`${ISS}/engines/futures/markets/forts/securities/USDRUBF.json?iss.meta=off&securities.columns=SECID,PREVSETTLEPRICE&marketdata.columns=SECID,LAST,UPDATETIME`);
+    const s = rows(j.securities)[0]||{}, m = rows(j.marketdata)[0]||{};
+    return {price: m.LAST ?? s.PREVSETTLEPRICE, prev: s.PREVSETTLEPRICE, time: m.UPDATETIME, src: "USDRUBF"};
+  } catch (e) { return null; }
+}
+
+async function load() {
+  if (!POSITIONS.length) { $("setup").style.display = ""; $("rows").innerHTML = '<tr><td colspan="9" class="sub">Нет позиций — задайте их выше.</td></tr>'; $("status").textContent = ""; return; }
+  $("setup").style.display = "none";
+  $("status").textContent = "Загружаю…"; $("status").className = "status";
+  try {
+    const secids = POSITIONS.map(p=>p.secid).join(",");
+    const [moex, cbr] = await Promise.all([
+      getJSON(`${ISS}/engines/stock/markets/bonds/boards/TQCB/securities.json?iss.meta=off&securities=${secids}&securities.columns=SECID,SHORTNAME,PREVPRICE,FACEVALUE,FACEUNIT,COUPONVALUE,COUPONPERCENT,COUPONPERIOD,ACCRUEDINT,NEXTCOUPON,MATDATE&marketdata.columns=SECID,LAST,BID,OFFER,YIELD,UPDATETIME,SYSTIME`),
+      getJSON(`${CBR}/daily_json.js`)
+    ]);
+    const sec = Object.fromEntries(rows(moex.securities).map(r=>[r.SECID, r]));
+    const md  = Object.fromEntries(rows(moex.marketdata).map(r=>[r.SECID, r]));
+    const fx = cbr.Valute.USD.Value, fxPrev = cbr.Valute.USD.Previous;
+    const rates = {today: fx, prev: fxPrev, date: cbr.Date.slice(0,10), prevDate: cbr.PreviousDate.slice(0,10)};
+
+    // курс на дату покупки (для Δ $ к вложениям) — один запрос на уникальную дату
+    const boughtDates = [...new Set(POSITIONS.map(p=>p.bought).filter(Boolean))];
+    const fxBought = {};
+    await Promise.all(boughtDates.map(async d => { fxBought[d] = await cbrOn(d); }));
+
+    const coup = await Promise.all(POSITIONS.map(p => couponsReceived(p, rates).catch(e => { console.warn("coupons", p.secid, e); return {rub:null,usd:null,n:0,err:true}; })));
+    const cpErr = coup.filter(c => c.err).length;
+
+    const items = POSITIONS.map((p,i) => {
+      const s = sec[p.secid] || {}, m = md[p.secid] || {};
+      const face = s.FACEVALUE, quasi = s.FACEUNIT && s.FACEUNIT !== "RUB" && s.FACEUNIT !== "SUR";
+      const k = quasi ? fx : 1, kPrev = quasi ? fxPrev : 1;
+      const last = m.LAST, prev = s.PREVPRICE;
+      const price = last ?? prev, src = last!=null ? "last" : "prev";
+      const accRub = s.ACCRUEDINT || 0;
+      // НКД вчера ≈ сегодня минус один день купона (COUPONVALUE — за период, в валюте номинала)
+      const dayCoupon = (s.COUPONVALUE && s.COUPONPERIOD) ? s.COUPONVALUE / s.COUPONPERIOD : 0;
+      const accRubY = Math.max(0, accRub - dayCoupon * kPrev);
+      const cleanRub = face * price/100 * k * p.qty, cleanRubY = face * prev/100 * kPrev * p.qty;
+      const nkdRub = accRub * p.qty, nkdRubY = accRubY * p.qty;
+      const costUsd = (p.cost_rub!=null && p.bought && fxBought[p.bought]) ? p.cost_rub / fxBought[p.bought] : null;
+      const cpMonthUsd = quasi ? face * (s.COUPONPERCENT||0)/100/12 * p.qty : null;
+      const cpMonthRub = quasi ? cpMonthUsd * fx : face*(s.COUPONPERCENT||0)/100/12*p.qty;
+      return {p, s, m, price, src, cleanRub, cleanRubY, nkdRub, nkdRubY, costUsd, cpMonthUsd, cpMonthRub, coup: coup[i], quasi};
+    });
+    state.data = {items, rates, yh: state.data?.yh, perp: state.data?.perp, sysTime: (Object.values(md)[0]||{}).SYSTIME};
+    render();
+    $("status").textContent = cpErr ? `Купоны не загрузились по ${cpErr} бумаг(е) — «Заработано» там без купонов; нажмите «Обновить».` : "";
+    if (!HIST) loadHistory().catch(e => { $("chart").innerHTML = '<div class="sub">история не загрузилась: ' + e.message + '</div>'; }); else drawChart();
+    // рыночный курс — отдельно, чтобы не задерживать таблицу
+    Promise.all([yahoo(), moexPerp()]).then(([yh, perp]) => { if (state.data) { state.data.yh = yh; state.data.perp = perp; renderFx(); } });
+  } catch (e) {
+    $("status").innerHTML = '<span class="err">Не удалось загрузить: ' + e.message + '</span> — проверьте доступ к iss.moex.com и cbr-xml-daily.ru';
+  }
+}
+
+function render() {
+  const d = state.data; if (!d) return;
+  const {items, rates, yh, perp} = d;
+  const yday = state.mode === "yday", nkd = state.withNkd;
+  const fx = rates.today, fxPrev = rates.prev;
+  $("hV1").textContent = nkd ? "Сейчас, ₽ (с НКД)" : "Сейчас, ₽ (без НКД)";
+  $("hV2").textContent = nkd ? "Сейчас, $ (с НКД)" : "Сейчас, $ (без НКД)";
+  $("modeStart").setAttribute("aria-pressed", String(!yday));
+  $("modeYday").setAttribute("aria-pressed", String(yday));
+  $("hD1").textContent = yday ? "Δ ₽ за день" : "Δ ₽";
+  $("hE").textContent = "Получено купонов";
+  $("tDeltaL").textContent = (yday ? "Δ ко вчера" : "Δ к вложениям") + (nkd ? " (с НКД)" : " (без НКД)");
+
+  let T = {val:0, usd:0, cost:0, costUsd:0, dR:0, dU:0, cpR:0, cpU:0, gotR:0, gotU:0, valY:0, usdY:0, hasCost:true};
+  const sorted = [...items].sort((a, b) => ((a.s.MATDATE || "9999") + a.p.secid).localeCompare((b.s.MATDATE || "9999") + b.p.secid));
+  const html = sorted.map(it => {
+    const {p, s, m, coup} = it;
+    it.valRub = it.cleanRub + (nkd ? it.nkdRub : 0);   it.valUsd = it.valRub / fx;
+    it.valRubY = it.cleanRubY + (nkd ? it.nkdRubY : 0); it.valUsdY = it.valRubY / fxPrev;
+    let dR, dU, base;
+    if (yday) { dR = it.valRub - it.valRubY; dU = it.valUsd - it.valUsdY; base = it.valRubY; }
+    else {
+      if (p.cost_rub == null) { dR = dU = null; base = null; }
+      else { dR = it.valRub - p.cost_rub; dU = it.costUsd!=null ? it.valUsd - it.costUsd : null; base = p.cost_rub; }
+    }
+    const earned = coup.rub;                                   // только полученные купоны, ₽ по ЦБ на даты выплат
+    const earnedP = (earned!=null && p.cost_rub) ? earned / p.cost_rub * 100 : null;
+    const dP = (dR!=null && base) ? dR/base*100 : null;
+    const cls = v => v==null ? "flat" : (v > 0.5 ? "pos" : v < -0.5 ? "neg" : "flat");
+    T.val += it.valRub; T.usd += it.valUsd; T.valY += it.valRubY; T.usdY += it.valUsdY;
+    if (p.cost_rub!=null) { T.cost += p.cost_rub; T.costUsd += it.costUsd||0; } else T.hasCost=false;
+    if (dR!=null) T.dR += dR; if (dU!=null) T.dU += dU;
+    T.cpR += it.cpMonthRub||0; T.cpU += it.cpMonthUsd||0; T.gotR += coup.rub||0; T.gotU += coup.usd||0;
+    const upd = m.UPDATETIME ? ` · ${m.UPDATETIME.slice(0,5)}` : "";
+    return `<tr>
+      <td class="name">${short(p.name)}<div class="s">до ${s.MATDATE ? s.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${m.YIELD ?? "—"}%${upd}</div></td>
+      <td class="num">${p.qty}</td>
+      <td class="num">${it.price!=null ? it.price.toFixed(2)+"%" : "—"}${it.src==="prev" ? '<span class="mark">*</span>' : ""}<div class="s">${m.BID ?? "—"} / ${m.OFFER ?? "—"}</div></td>
+      <td class="num">${p.cost_rub!=null ? fmt(p.cost_rub) : "—"}<div class="s">${it.costUsd!=null ? fmt(it.costUsd)+" $" : ""}</div></td>
+      <td class="num ${earned>0 ? "pos" : "flat"}">${earned!=null ? fmt(earned) : "—"}<div class="s">${earned!=null ? fmt(coup.usd) + " $ · " + coup.n + " выпл." + (earnedP!=null ? " · " + earnedP.toFixed(1) + "%" : "") : (coup.err ? "не загрузилось" : "")}</div></td>
+      <td class="num ${cls(p.cost_rub!=null ? it.valRub - p.cost_rub : null)}">${fmt(it.valRub)}<div class="s">${fmt(it.valRub/p.qty)} за шт</div></td>
+      <td class="num ${cls(it.costUsd!=null ? it.valUsd - it.costUsd : null)}">${fmt(it.valUsd)}<div class="s">${fmt(it.valUsd/p.qty, 2)} за шт</div></td>
+      <td class="num delta ${cls(dR)}">${sgn(dR)}<div class="s">${pct(dP)}</div></td>
+      <td class="num">${fmt(it.cpMonthRub)}<div class="s">${it.cpMonthUsd!=null ? fmt(it.cpMonthUsd)+" $ · "+(s.COUPONPERCENT??"")+"%" : ""}</div></td>
+    </tr>`;
+  }).join("");
+  const baseT = yday ? T.valY : (T.hasCost ? T.cost : null);
+  const dPT = baseT ? T.dR/baseT*100 : null;
+  const clsT = v => v==null ? "flat" : (v > 0.5 ? "pos" : v < -0.5 ? "neg" : "flat");
+  $("rows").innerHTML = html + `<tr class="tot"><td>Итого</td><td class="num">${items.length} поз.</td><td></td>
+    <td class="num">${T.hasCost ? fmt(T.cost) : "—"}<div class="s">${T.hasCost ? fmt(T.costUsd)+" $" : ""}</div></td>
+    <td class="num ${T.gotR>0 ? "pos" : "flat"}">${fmt(T.gotR)}<div class="s">${fmt(T.gotU)} $${T.hasCost ? " · " + (T.gotR/T.cost*100).toFixed(1) + "%" : ""}</div></td>
+    <td class="num ${clsT(T.hasCost ? T.val - T.cost : null)}">${fmt(T.val)}</td><td class="num ${clsT(T.hasCost ? T.usd - T.costUsd : null)}">${fmt(T.usd)}</td>
+    <td class="num delta ${clsT(T.dR)}">${sgn(T.dR)}<div class="s">${pct(dPT)}</div></td>
+    <td class="num">${fmt(T.cpR)}<div class="s">${fmt(T.cpU)} $</div></td></tr>`;
+
+  $("tVal").textContent = fmt(T.val/1e6, 2) + " млн ₽";
+  $("tValUsd").textContent = fmt(T.usd) + " $ по ЦБ " + rates.today.toFixed(2);
+  $("tDelta").textContent = sgn(T.dR/1e6, 2) + " млн ₽";
+  $("tDelta").style.color = T.dR > 0 ? "var(--pos)" : T.dR < 0 ? "var(--neg)" : "";
+  $("tDeltaSub").textContent = (dPT!=null ? pct(dPT) : "—") + " · " + sgn(T.dU) + " $" + (yday ? ` · курс ${rates.prev.toFixed(2)} → ${rates.today.toFixed(2)}` : "");
+  $("tCoup").textContent = fmt(T.cpR) + " ₽";
+  $("tCoupUsd").textContent = fmt(T.cpU) + " $ в месяц · " + fmt(T.cpR*12/1e6, 2) + " млн ₽ в год";
+  $("tFx").textContent = rates.today.toFixed(4);
+  $("tFxSub").textContent = `на ${rates.date.split("-").reverse().join(".")} · пред. ${rates.prev.toFixed(4)} (${sgn(rates.today-rates.prev, 4)})`;
+  renderFx();
+  $("asof").textContent = `MOEX ${d.sysTime || ""} · курс ЦБ на ${rates.date.split("-").reverse().join(".")} · обновлено ${new Date().toLocaleTimeString("ru-RU")}`;
+}
+
+function renderFx() {
+  const d = state.data; if (!d) return;
+  const {rates, yh, perp} = d; const fx = rates.today;
+  const paint = v => { $("tYh").style.color = v > 0.005 ? "var(--pos)" : v < -0.005 ? "var(--neg)" : ""; };
+  if (yh && yh.price) {
+    $("tYh").textContent = yh.price.toFixed(2); paint(yh.price - fx);
+    $("tYhSub").textContent = `${yh.time.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})} · к ЦБ ${sgn(yh.price-fx,2)} (${pct((yh.price/fx-1)*100)})` + (perp && perp.price ? ` · USDRUBF ${perp.price.toFixed(2)}` : "");
+  } else if (perp && perp.price) {
+    $("tYh").textContent = perp.price.toFixed(2); paint(perp.price - fx);
+    $("tYhSub").textContent = `Yahoo недоступен — вечный фьючерс USDRUBF MOEX, ${perp.time || ""} · к ЦБ ${sgn(perp.price-fx,2)}`;
+  } else if (yh === undefined && perp === undefined) { $("tYh").textContent = "…"; $("tYhSub").textContent = "загружаю Yahoo"; }
+  else { $("tYh").textContent = "—"; $("tYh").style.color = ""; $("tYhSub").textContent = "нет данных"; }
+}
+
+// ---------- график стоимости с даты последней покупки ----------
+let HIST = null;   // {start, dates:[...], perBond:{secid:[{d, close, acc, face}]}, fix:[{d, v}]}
+async function issHistory(secid, from) {
+  const out = []; let start = 0;
+  for (let i = 0; i < 20; i++) {
+    const j = await getJSON(`${ISS}/history/engines/stock/markets/bonds/boards/TQCB/securities/${secid}.json?iss.meta=off&from=${from}&start=${start}&history.columns=TRADEDATE,CLOSE,LEGALCLOSEPRICE,WAPRICE,ACCINT,FACEVALUE`);
+    const rs = rows(j.history);
+    for (const r of rs) { const c = r.CLOSE ?? r.LEGALCLOSEPRICE ?? r.WAPRICE; if (c != null) out.push({d: r.TRADEDATE, close: c, acc: r.ACCINT || 0, face: r.FACEVALUE}); }
+    const cur = j["history.cursor"] ? j["history.cursor"].data[0] : null;
+    if (!cur) break; start += cur[2]; if (start >= cur[1] || !rs.length) break;
+  }
+  return out;
+}
+async function fixingHistory(from) {
+  const out = []; let start = 0;
+  for (let i = 0; i < 20; i++) {
+    const j = await getJSON(`${ISS}/history/engines/currency/markets/index/securities/USDFIXME.json?iss.meta=off&from=${from}&start=${start}&history.columns=TRADEDATE,CLOSE`);
+    const rs = rows(j.history); for (const r of rs) if (r.CLOSE != null) out.push({d: r.TRADEDATE, v: r.CLOSE});
+    const cur = j["history.cursor"] ? j["history.cursor"].data[0] : null;
+    if (!cur) break; start += cur[2]; if (start >= cur[1] || !rs.length) break;
+  }
+  return out;
+}
+const asOf = (arr, key, d, before = false) => { let best = null; for (const r of arr) { if (before ? r.d < d : r.d <= d) best = r[key]; else break; } return best; };
+async function loadHistory() {
+  const lotDates = POSITIONS.flatMap(p => (p.lots || []).map(l => l.date)).filter(Boolean);
+  if (!lotDates.length) { $("chartCard").style.display = "none"; return; }
+  const start = lotDates.sort().slice(-1)[0];
+  const fixFrom = new Date(start + "T12:00:00"); fixFrom.setDate(fixFrom.getDate() - 10);
+  const [fix, ...hists] = await Promise.all([fixingHistory(fixFrom.toISOString().slice(0,10)), ...POSITIONS.map(p => issHistory(p.secid, start))]);
+  const perBond = {}; POSITIONS.forEach((p, i) => perBond[p.secid] = hists[i]);
+  const dates = [...new Set(hists.flat().map(r => r.d))].sort();
+  HIST = {start, dates, perBond, fix};
+  drawChart();
+}
+function seriesValue(nkd) {
+  // стоимость портфеля по дням: курс ЦБ на дату D = фиксинг предыдущего торгового дня
+  const pts = [];
+  for (const d of HIST.dates) {
+    const fx = asOf(HIST.fix, "v", d, true); if (!fx) continue;
+    let v = 0, ok = true;
+    for (const p of POSITIONS) {
+      const h = HIST.perBond[p.secid]; let row = null; for (const r of h) { if (r.d <= d) row = r; else break; }
+      if (!row) { ok = false; break; }
+      v += p.qty * (row.face * row.close / 100 * fx + (nkd ? row.acc : 0));
+    }
+    if (ok) pts.push({d, v});
+  }
+  // сегодняшняя точка из живой таблицы
+  if (state.data) {
+    const it = state.data.items; const today = new Date().toISOString().slice(0,10);
+    const v = it.reduce((a, x) => a + x.cleanRub + (nkd ? x.nkdRub : 0), 0);
+    if (pts.length && pts[pts.length-1].d === today) pts[pts.length-1].v = v; else pts.push({d: today, v, live: true});
+  }
+  return pts;
+}
+function drawChart() {
+  if (!HIST || !HIST.dates.length) { $("chart").innerHTML = '<div class="sub">нет истории</div>'; return; }
+  const nkd = state.withNkd; const pts = seriesValue(nkd);
+  if (pts.length < 2) { $("chart").innerHTML = '<div class="sub">мало данных</div>'; return; }
+  const cost = POSITIONS.every(p => p.cost_rub != null) ? POSITIONS.reduce((a,p) => a + p.cost_rub, 0) : null;
+  // курс ЦБ на те же даты (на дату D действует фиксинг предыдущего торгового дня); сегодня — живой курс
+  const fxPts = pts.map(p => ({d: p.d, v: p.live && state.data ? state.data.rates.today : asOf(HIST.fix, "v", p.d, true)})).filter(p => p.v);
+  const W = 900, H = 260, pl = 52, pr = 118, pt = 14, pb = 26;
+  const t0 = new Date(pts[0].d).getTime(), t1 = new Date(pts[pts.length-1].d).getTime();
+  const vs = pts.map(p => p.v/1e6).concat(cost ? [cost/1e6] : []);
+  let lo = Math.min(...vs), hi = Math.max(...vs); const m = (hi - lo) * 0.08 || 1; lo -= m; hi += m;
+  const X = t => pl + (t - t0) / (t1 - t0 || 1) * (W - pl - pr), Y = v => H - pb - (v - lo) / (hi - lo) * (H - pb - pt);
+  let flo = Math.min(...fxPts.map(p => p.v)), fhi = Math.max(...fxPts.map(p => p.v)); const fm = (fhi - flo) * 0.08 || 1; flo -= fm; fhi += fm;
+  const Y2 = v => H - pb - (v - flo) / (fhi - flo) * (H - pb - pt);
+  // тики Y
+  const span = hi - lo, raw = span / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))); let step = mag; for (const k of [1,2,2.5,5,10]) { step = k*mag; if (span/step <= 5) break; }
+  let g = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W-pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="tick" x="${pl-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${v.toFixed(step<1?1:0)}</text>`;
+  // тики X — начала месяцев
+  const d0 = new Date(pts[0].d), d1 = new Date(pts[pts.length-1].d); const RU = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+  const nMonths = (d1.getFullYear()-d0.getFullYear())*12 + d1.getMonth()-d0.getMonth(); const every = nMonths > 14 ? 2 : 1;
+  for (let y = d0.getFullYear(), mo = d0.getMonth()+1; ; mo++) { if (mo > 11) { mo = 0; y++; } const dm = new Date(y, mo, 1); if (dm > d1) break; if ((mo % every) === 0) g += `<text class="tick" x="${X(dm.getTime()).toFixed(1)}" y="${H-8}" text-anchor="middle">${RU[mo]}${mo===0?" "+String(y).slice(2):""}</text>`; }
+  g += `<line class="axis" x1="${pl}" x2="${W-pr}" y1="${H-pb}" y2="${H-pb}"/>`;
+  // правая ось — курс
+  const fspan = fhi - flo, fraw = fspan / 4, fmag = Math.pow(10, Math.floor(Math.log10(fraw))); let fstep = fmag; for (const k of [1,2,2.5,5,10]) { fstep = k*fmag; if (fspan/fstep <= 5) break; }
+  const fLastY = fxPts.length ? Y2(fxPts[fxPts.length-1].v) : -99;
+  for (let v = Math.ceil(flo/fstep)*fstep; v <= fhi + 1e-9; v += fstep) { if (Math.abs(Y2(v) - fLastY) < 13) continue; g += `<text class="tick2" x="${W-pr+8}" y="${(Y2(v)+4).toFixed(1)}">${v.toFixed(fstep<1?1:0)}</text>`; }
+  const fpath = fxPts.map((p,i) => (i?"L":"M") + X(new Date(p.d).getTime()).toFixed(1) + "," + Y2(p.v).toFixed(1)).join(" ");
+  const path = pts.map((p,i) => (i?"L":"M") + X(new Date(p.d).getTime()).toFixed(1) + "," + Y(p.v/1e6).toFixed(1)).join(" ");
+  g += `<path class="area" d="${path} L${X(t1).toFixed(1)},${H-pb} L${X(t0).toFixed(1)},${H-pb} Z"/><path class="line2" d="${fpath}"/><path class="line" d="${path}"/>`;
+  const fl = fxPts[fxPts.length-1]; if (fl) g += `<circle cx="${X(new Date(fl.d).getTime()).toFixed(1)}" cy="${Y2(fl.v).toFixed(1)}" r="3.5" fill="var(--fx)" stroke="var(--surface)" stroke-width="2"/><text class="tick2" x="${(W-pr+8).toFixed(1)}" y="${(Y2(fl.v)+4).toFixed(1)}" style="font-weight:600">${fl.v.toFixed(2)}</text>`;
+  if (cost) { const yc = Y(cost/1e6); g += `<line class="ref" x1="${pl}" x2="${W-pr}" y1="${yc.toFixed(1)}" y2="${yc.toFixed(1)}"/><text class="reflab" x="${W-pr-6}" y="${(yc-5).toFixed(1)}" text-anchor="end">вложено ${(cost/1e6).toFixed(2)}</text>`; }
+  const last = pts[pts.length-1]; const lx = X(t1), ly = Y(last.v/1e6);
+  const lastLabelY = cost && Math.abs(ly - Y(cost/1e6)) < 14 ? (ly < Y(cost/1e6) ? ly - 10 : ly + 14) : ly + 4;
+  g += `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text class="endlab" x="${(lx+8).toFixed(1)}" y="${lastLabelY.toFixed(1)}">${(last.v/1e6).toFixed(2)}</text>`;
+  g += `<g id="hov" style="display:none"><line class="axis" id="hovx" y1="${pt}" y2="${H-pb}" style="stroke:var(--ink);opacity:.5"/><circle id="hovc" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></g></svg>`;
+  $("chart").innerHTML = g;
+  const mn = pts.reduce((a,p) => p.v < a.v ? p : a), mx = pts.reduce((a,p) => p.v > a.v ? p : a);
+  $("chartSub").textContent = `с ${HIST.start.split("-").reverse().join(".")} (последняя покупка) · ${nkd ? "с НКД" : "без НКД"} · мин ${(mn.v/1e6).toFixed(2)} (${mn.d.slice(5).split("-").reverse().join(".")}) · макс ${(mx.v/1e6).toFixed(2)} (${mx.d.slice(5).split("-").reverse().join(".")})`;
+  // hover
+  const svg = $("chart").querySelector("svg"), tip = $("tip");
+  svg.addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width * W; const t = t0 + (px - pl) / (W - pl - pr) * (t1 - t0);
+    let best = pts[0], bd = Infinity; for (const p of pts) { const dd = Math.abs(new Date(p.d).getTime() - t); if (dd < bd) { bd = dd; best = p; } }
+    const cx = X(new Date(best.d).getTime()), cy = Y(best.v/1e6);
+    const hov = svg.querySelector("#hov"); hov.style.display = ""; svg.querySelector("#hovx").setAttribute("x1", cx); svg.querySelector("#hovx").setAttribute("x2", cx);
+    svg.querySelector("#hovc").setAttribute("cx", cx); svg.querySelector("#hovc").setAttribute("cy", cy);
+    const bf = fxPts.find(p => p.d === best.d);
+    tip.innerHTML = `<div style="color:var(--muted)">${best.d.split("-").reverse().join(".")}${best.live ? " (сейчас)" : ""}</div><b>${(best.v/1e6).toFixed(2)} млн ₽</b>` + (cost ? `<div>${sgn(best.v - cost)} к вложениям</div>` : "") + (bf ? `<div style="color:var(--fx)">курс ЦБ ${bf.v.toFixed(4)}</div>` : "");
+    tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + "px"; tip.style.top = (e.clientY + 14) + "px";
+  });
+  svg.addEventListener("mouseleave", () => { svg.querySelector("#hov").style.display = "none"; tip.style.display = "none"; });
+}
+
+$("modeStart").onclick = () => { state.mode = "start"; render(); };
+$("modeYday").onclick  = () => { state.mode = "yday"; render(); };
+$("withNkd").onchange = e => { state.withNkd = e.target.checked; render(); if (HIST) drawChart(); };
+$("refresh").onclick = load;
+$("setupSave").onclick = () => {
+  try { const j = JSON.parse($("setupJson").value); const list = normalize(Array.isArray(j) ? j : j.positions);
+        if (!list.length) throw new Error("пустой список"); localStorage.setItem(LS_KEY, JSON.stringify(list)); POSITIONS = list; load(); }
+  catch (e) { alert("Не удалось разобрать JSON: " + e.message); }
+};
+$("setupClear").onclick = () => { localStorage.removeItem(LS_KEY); POSITIONS = []; history.replaceState(null, "", location.pathname); load(); };
+window.addEventListener("hashchange", () => { const h = fromHash(); if (h && h.length) { POSITIONS = h; try { localStorage.setItem(LS_KEY, JSON.stringify(h)); } catch(e){} load(); } });
+load();
+setInterval(load, 15*60*1000);
+</script>
+</body>
+</html>
