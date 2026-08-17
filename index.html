@@ -112,12 +112,12 @@ svg .area { fill: var(--accent); opacity:.10; }
 </div>
 <div class="tw"><table id="tbl">
 <thead><tr>
-  <th>Бумага</th><th class="num">шт</th><th class="num">Цена</th>
-  <th class="num">Вложено</th><th class="num" id="hE">Получено купонов</th><th class="num" id="hV1">Сейчас, ₽</th><th class="num" id="hV2">Сейчас, $</th>
+  <th>Бумага</th><th class="num">Цена</th>
+  <th class="num">Вложено</th><th class="num" id="hV1">Сейчас</th><th class="num" id="hE">Получено купонов</th>
   <th class="num" id="hD1">Δ ₽</th>
   <th class="num">Купон / мес</th>
 </tr></thead>
-<tbody id="rows"><tr><td colspan="9" class="sub">Загружаю котировки MOEX и курс ЦБ…</td></tr></tbody>
+<tbody id="rows"><tr><td colspan="7" class="sub">Загружаю котировки MOEX и курс ЦБ…</td></tr></tbody>
 </table></div>
 <div class="status" id="status"></div>
 <p class="sub" style="max-width:80ch;margin-top:14px">Стоимость — по официальному курсу ЦБ, с НКД или без (галка «НКД» переключает колонки «Сейчас» и Δ);
@@ -276,8 +276,7 @@ function render() {
   const {items, rates, yh, perp} = d;
   const yday = state.mode === "yday", nkd = state.withNkd;
   const fx = rates.today, fxPrev = rates.prev;
-  $("hV1").textContent = nkd ? "Сейчас, ₽ (с НКД)" : "Сейчас, ₽ (без НКД)";
-  $("hV2").textContent = nkd ? "Сейчас, $ (с НКД)" : "Сейчас, $ (без НКД)";
+  $("hV1").textContent = nkd ? "Сейчас (с НКД)" : "Сейчас (без НКД)";
   $("modeStart").setAttribute("aria-pressed", String(!yday));
   $("modeYday").setAttribute("aria-pressed", String(yday));
   $("hD1").textContent = yday ? "Δ ₽ за день" : "Δ ₽";
@@ -306,13 +305,11 @@ function render() {
     T.cpR += it.cpMonthRub||0; T.cpU += it.cpMonthUsd||0; T.gotR += coup.rub||0; T.gotU += coup.usd||0;
     const upd = m.UPDATETIME ? ` · ${m.UPDATETIME.slice(0,5)}` : "";
     return `<tr>
-      <td class="name">${short(p.name)}<div class="s">до ${s.MATDATE ? s.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${m.YIELD ?? "—"}%${upd}</div></td>
-      <td class="num">${p.qty}</td>
+      <td class="name">${short(p.name)}<div class="s">${p.qty} шт · до ${s.MATDATE ? s.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${m.YIELD ?? "—"}%${upd}</div></td>
       <td class="num">${it.price!=null ? it.price.toFixed(2)+"%" : "—"}${it.src==="prev" ? '<span class="mark">*</span>' : ""}<div class="s">${m.BID ?? "—"} / ${m.OFFER ?? "—"}</div></td>
       <td class="num">${p.cost_rub!=null ? fmt(p.cost_rub) : "—"}<div class="s">${it.costUsd!=null ? fmt(it.costUsd)+" $" : ""}</div></td>
+      <td class="num ${cls(p.cost_rub!=null ? it.valRub - p.cost_rub : null)}">${fmt(it.valRub)}<div class="s">${fmt(it.valUsd)} $ · ${fmt(it.valRub/p.qty)} за шт</div></td>
       <td class="num ${earned>0 ? "pos" : "flat"}">${earned!=null ? fmt(earned) : "—"}<div class="s">${earned!=null ? fmt(coup.usd) + " $ · " + coup.n + " выпл." + (earnedP!=null ? " · " + earnedP.toFixed(1) + "%" : "") : (coup.err ? "не загрузилось" : "")}</div></td>
-      <td class="num ${cls(p.cost_rub!=null ? it.valRub - p.cost_rub : null)}">${fmt(it.valRub)}<div class="s">${fmt(it.valRub/p.qty)} за шт</div></td>
-      <td class="num ${cls(it.costUsd!=null ? it.valUsd - it.costUsd : null)}">${fmt(it.valUsd)}<div class="s">${fmt(it.valUsd/p.qty, 2)} за шт</div></td>
       <td class="num delta ${cls(dR)}">${sgn(dR)}<div class="s">${pct(dP)}</div></td>
       <td class="num">${fmt(it.cpMonthRub)}<div class="s">${it.cpMonthUsd!=null ? fmt(it.cpMonthUsd)+" $ · "+(s.COUPONPERCENT??"")+"%" : ""}</div></td>
     </tr>`;
@@ -320,10 +317,10 @@ function render() {
   const baseT = yday ? T.valY : (T.hasCost ? T.cost : null);
   const dPT = baseT ? T.dR/baseT*100 : null;
   const clsT = v => v==null ? "flat" : (v > 0.5 ? "pos" : v < -0.5 ? "neg" : "flat");
-  $("rows").innerHTML = html + `<tr class="tot"><td>Итого</td><td class="num">${items.length} поз.</td><td></td>
+  $("rows").innerHTML = html + `<tr class="tot"><td>Итого<div class="s">${items.length} поз.</div></td><td></td>
     <td class="num">${T.hasCost ? fmt(T.cost) : "—"}<div class="s">${T.hasCost ? fmt(T.costUsd)+" $" : ""}</div></td>
+    <td class="num ${clsT(T.hasCost ? T.val - T.cost : null)}">${fmt(T.val)}<div class="s">${fmt(T.usd)} $</div></td>
     <td class="num ${T.gotR>0 ? "pos" : "flat"}">${fmt(T.gotR)}<div class="s">${fmt(T.gotU)} $${T.hasCost ? " · " + (T.gotR/T.cost*100).toFixed(1) + "%" : ""}</div></td>
-    <td class="num ${clsT(T.hasCost ? T.val - T.cost : null)}">${fmt(T.val)}</td><td class="num ${clsT(T.hasCost ? T.usd - T.costUsd : null)}">${fmt(T.usd)}</td>
     <td class="num delta ${clsT(T.dR)}">${sgn(T.dR)}<div class="s">${pct(dPT)}</div></td>
     <td class="num">${fmt(T.cpR)}<div class="s">${fmt(T.cpU)} $</div></td></tr>`;
 
