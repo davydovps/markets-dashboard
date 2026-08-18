@@ -89,7 +89,6 @@ svg .area { fill: var(--accent); opacity:.10; }
       <button id="modeYday" aria-pressed="false">Δ ко вчера</button>
     </div>
     <label class="btn" style="display:inline-flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="withNkd" checked> НКД</label>
-    <label class="btn" style="display:inline-flex;gap:8px;align-items:center;cursor:pointer" title="Прибавлять полученные купоны к Δ к вложениям"><input type="checkbox" id="withCp"> купоны в Δ</label>
     <button class="btn" id="refresh">Обновить</button>
   </div>
 </div>
@@ -130,7 +129,7 @@ svg .area { fill: var(--accent); opacity:.10; }
 <p class="sub" style="max-width:80ch;margin-top:14px">Стоимость — по официальному курсу ЦБ, с НКД или без (галка «НКД» переключает колонки «Сейчас» и Δ);
 колонки «Сейчас» подсвечены относительно вложений всегда, независимо от режима Δ;
 цена — последняя сделка, если сегодня сделок нет — закрытие предыдущего дня (помечено *).
-«Δ ко вчера» — против закрытия предыдущего торгового дня по предыдущему курсу ЦБ. Галка «купоны в Δ» прибавляет полученные купоны к Δ к вложениям (на «Δ ко вчера» не влияет).
+«Δ ко вчера» — против закрытия предыдущего торгового дня по предыдущему курсу ЦБ.
 Купон/мес — среднемесячный эквивалент годового купона.
 «Получено купонов» — с даты покупки каждого лота: по календарю выплат MOEX, каждая выплата в рублях по курсу ЦБ на её дату; в подстроке — сумма в $, число выплат и % от вложений. От галки «НКД» и режима Δ не зависит.
 
@@ -168,7 +167,7 @@ const sgn = (n, d=0) => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + fmt(n, d)
 const pct = n => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + n.toFixed(2) + "%";
 const short = s => s.replace("Газпром капитал","ГазКап").replace("ЕвразХолдинг Финанс","Евраз").replace("СИБУР Холдинг","СИБУР").replace("Акрон (ПАО)","Акрон").replace("ПОЛЮС","Полюс");
 
-let state = { mode: "start", withNkd: true, withCp: false, data: null };
+let state = { mode: "start", withNkd: true, data: null };
 
 async function getJSON(url, timeoutMs = 20000, retries = 2) {
   let lastErr;
@@ -281,14 +280,14 @@ async function load() {
 function render() {
   const d = state.data; if (!d) return;
   const {items, rates, yh, perp} = d;
-  const yday = state.mode === "yday", nkd = state.withNkd, cp = state.withCp && !yday;
+  const yday = state.mode === "yday", nkd = state.withNkd;
   const fx = rates.today, fxPrev = rates.prev;
   $("hV1").textContent = nkd ? "Сейчас (с НКД)" : "Сейчас (без НКД)";
   $("modeStart").setAttribute("aria-pressed", String(!yday));
   $("modeYday").setAttribute("aria-pressed", String(yday));
-  $("hD1").textContent = yday ? "Δ ₽ за день" : (cp ? "Δ ₽ с купонами" : "Δ ₽");
+  $("hD1").textContent = yday ? "Δ ₽ за день" : "Δ ₽";
   $("hE").textContent = "Получено купонов";
-  $("tDeltaL").textContent = (yday ? "Δ ко вчера" : "Δ к вложениям") + (nkd ? " (с НКД" : " (без НКД") + (cp ? ", с купонами)" : ")");
+  $("tDeltaL").textContent = (yday ? "Δ ко вчера" : "Δ к вложениям") + (nkd ? " (с НКД)" : " (без НКД)");
 
   let T = {val:0, usd:0, cost:0, costUsd:0, dR:0, dU:0, cpR:0, cpU:0, gotR:0, gotU:0, valY:0, usdY:0, hasCost:true};
   const sorted = [...items].sort((a, b) => ((a.s.MATDATE || "9999") + a.p.secid).localeCompare((b.s.MATDATE || "9999") + b.p.secid));
@@ -300,7 +299,7 @@ function render() {
     if (yday) { dR = it.valRub - it.valRubY; dU = it.valUsd - it.valUsdY; base = it.valRubY; }
     else {
       if (p.cost_rub == null) { dR = dU = null; base = null; }
-      else { dR = it.valRub - p.cost_rub + (cp && coup.rub!=null ? coup.rub : 0); dU = it.costUsd!=null ? it.valUsd - it.costUsd + (cp && coup.usd!=null ? coup.usd : 0) : null; base = p.cost_rub; }
+      else { dR = it.valRub - p.cost_rub; dU = it.costUsd!=null ? it.valUsd - it.costUsd : null; base = p.cost_rub; }
     }
     const earned = coup.rub;                                   // только полученные купоны, ₽ по ЦБ на даты выплат
     const earnedP = (earned!=null && p.cost_rub) ? earned / p.cost_rub * 100 : null;
@@ -561,7 +560,6 @@ function bindBondHover(svg, b) {
 $("modeStart").onclick = () => { state.mode = "start"; render(); };
 $("modeYday").onclick  = () => { state.mode = "yday"; render(); };
 $("withNkd").onchange = e => { state.withNkd = e.target.checked; render(); if (HIST) { drawChart(); drawBondCharts(); } };
-$("withCp").onchange = e => { state.withCp = e.target.checked; render(); };
 $("refresh").onclick = load;
 $("setupSave").onclick = () => {
   try { const j = JSON.parse($("setupJson").value); const list = normalize(Array.isArray(j) ? j : j.positions);
