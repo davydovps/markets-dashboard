@@ -69,6 +69,10 @@ svg .area { fill: var(--accent); opacity:.10; }
 .tip { position: fixed; pointer-events:none; background: var(--surface); border:1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size:.82rem; box-shadow: 0 4px 16px rgba(0,0,0,.15); display:none; z-index: 10; font-variant-numeric: tabular-nums; }
 .err { color: var(--neg); }
 .mark { color: var(--muted); font-size:.75rem; }
+.bond-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; margin-top: 10px; }
+.bond-grid .chart-card { margin-bottom: 0; }
+.sect { margin: 20px 0 8px; font-size: 1.05rem; font-weight: 600; }
+.cpos { color: var(--pos); font-weight:600; } .cneg { color: var(--neg); font-weight:600; }
 @media (max-width: 900px) { table { font-size:.78rem; } th, td { padding: 6px 5px; } td .s { display:none; } .tw { overflow-x:auto; } }
 </style>
 </head>
@@ -85,6 +89,7 @@ svg .area { fill: var(--accent); opacity:.10; }
       <button id="modeYday" aria-pressed="false">Δ ко вчера</button>
     </div>
     <label class="btn" style="display:inline-flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="withNkd" checked> НКД</label>
+    <label class="btn" style="display:inline-flex;gap:8px;align-items:center;cursor:pointer" title="Прибавлять полученные купоны к Δ к вложениям"><input type="checkbox" id="withCp"> купоны в Δ</label>
     <button class="btn" id="refresh">Обновить</button>
   </div>
 </div>
@@ -120,10 +125,12 @@ svg .area { fill: var(--accent); opacity:.10; }
 <tbody id="rows"><tr><td colspan="7" class="sub">Загружаю котировки MOEX и курс ЦБ…</td></tr></tbody>
 </table></div>
 <div class="status" id="status"></div>
+<div class="sect">По бумагам</div>
+<div id="bonds" class="bond-grid"><div class="sub">графики появятся после загрузки истории…</div></div>
 <p class="sub" style="max-width:80ch;margin-top:14px">Стоимость — по официальному курсу ЦБ, с НКД или без (галка «НКД» переключает колонки «Сейчас» и Δ);
 колонки «Сейчас» подсвечены относительно вложений всегда, независимо от режима Δ;
 цена — последняя сделка, если сегодня сделок нет — закрытие предыдущего дня (помечено *).
-«Δ ко вчера» — против закрытия предыдущего торгового дня по предыдущему курсу ЦБ.
+«Δ ко вчера» — против закрытия предыдущего торгового дня по предыдущему курсу ЦБ. Галка «купоны в Δ» прибавляет полученные купоны к Δ к вложениям (на «Δ ко вчера» не влияет).
 Купон/мес — среднемесячный эквивалент годового купона.
 «Получено купонов» — с даты покупки каждого лота: по календарю выплат MOEX, каждая выплата в рублях по курсу ЦБ на её дату; в подстроке — сумма в $, число выплат и % от вложений. От галки «НКД» и режима Δ не зависит.
 
@@ -161,7 +168,7 @@ const sgn = (n, d=0) => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + fmt(n, d)
 const pct = n => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + n.toFixed(2) + "%";
 const short = s => s.replace("Газпром капитал","ГазКап").replace("ЕвразХолдинг Финанс","Евраз").replace("СИБУР Холдинг","СИБУР").replace("Акрон (ПАО)","Акрон").replace("ПОЛЮС","Полюс");
 
-let state = { mode: "start", withNkd: true, data: null };
+let state = { mode: "start", withNkd: true, withCp: false, data: null };
 
 async function getJSON(url, timeoutMs = 20000, retries = 2) {
   let lastErr;
@@ -263,7 +270,7 @@ async function load() {
     state.data = {items, rates, yh: state.data?.yh, perp: state.data?.perp, sysTime: (Object.values(md)[0]||{}).SYSTIME};
     render();
     $("status").textContent = cpErr ? `Купоны не загрузились по ${cpErr} бумаг(е) — «Заработано» там без купонов; нажмите «Обновить».` : "";
-    if (!HIST) loadHistory().catch(e => { $("chart").innerHTML = '<div class="sub">история не загрузилась: ' + e.message + '</div>'; }); else drawChart();
+    if (!HIST) loadHistory().catch(e => { $("chart").innerHTML = '<div class="sub">история не загрузилась: ' + e.message + '</div>'; }); else { drawChart(); drawBondCharts(); }
     // рыночный курс — отдельно, чтобы не задерживать таблицу
     Promise.all([yahoo(), moexPerp()]).then(([yh, perp]) => { if (state.data) { state.data.yh = yh; state.data.perp = perp; renderFx(); } });
   } catch (e) {
@@ -274,14 +281,14 @@ async function load() {
 function render() {
   const d = state.data; if (!d) return;
   const {items, rates, yh, perp} = d;
-  const yday = state.mode === "yday", nkd = state.withNkd;
+  const yday = state.mode === "yday", nkd = state.withNkd, cp = state.withCp && !yday;
   const fx = rates.today, fxPrev = rates.prev;
   $("hV1").textContent = nkd ? "Сейчас (с НКД)" : "Сейчас (без НКД)";
   $("modeStart").setAttribute("aria-pressed", String(!yday));
   $("modeYday").setAttribute("aria-pressed", String(yday));
-  $("hD1").textContent = yday ? "Δ ₽ за день" : "Δ ₽";
+  $("hD1").textContent = yday ? "Δ ₽ за день" : (cp ? "Δ ₽ с купонами" : "Δ ₽");
   $("hE").textContent = "Получено купонов";
-  $("tDeltaL").textContent = (yday ? "Δ ко вчера" : "Δ к вложениям") + (nkd ? " (с НКД)" : " (без НКД)");
+  $("tDeltaL").textContent = (yday ? "Δ ко вчера" : "Δ к вложениям") + (nkd ? " (с НКД" : " (без НКД") + (cp ? ", с купонами)" : ")");
 
   let T = {val:0, usd:0, cost:0, costUsd:0, dR:0, dU:0, cpR:0, cpU:0, gotR:0, gotU:0, valY:0, usdY:0, hasCost:true};
   const sorted = [...items].sort((a, b) => ((a.s.MATDATE || "9999") + a.p.secid).localeCompare((b.s.MATDATE || "9999") + b.p.secid));
@@ -293,7 +300,7 @@ function render() {
     if (yday) { dR = it.valRub - it.valRubY; dU = it.valUsd - it.valUsdY; base = it.valRubY; }
     else {
       if (p.cost_rub == null) { dR = dU = null; base = null; }
-      else { dR = it.valRub - p.cost_rub; dU = it.costUsd!=null ? it.valUsd - it.costUsd : null; base = p.cost_rub; }
+      else { dR = it.valRub - p.cost_rub + (cp && coup.rub!=null ? coup.rub : 0); dU = it.costUsd!=null ? it.valUsd - it.costUsd + (cp && coup.usd!=null ? coup.usd : 0) : null; base = p.cost_rub; }
     }
     const earned = coup.rub;                                   // только полученные купоны, ₽ по ЦБ на даты выплат
     const earnedP = (earned!=null && p.cost_rub) ? earned / p.cost_rub * 100 : null;
@@ -379,12 +386,17 @@ async function loadHistory() {
   const lotDates = POSITIONS.flatMap(p => (p.lots || []).map(l => l.date)).filter(Boolean);
   if (!lotDates.length) { $("chartCard").style.display = "none"; return; }
   const start = lotDates.sort().slice(-1)[0];
-  const fixFrom = new Date(start + "T12:00:00"); fixFrom.setDate(fixFrom.getDate() - 10);
-  const [fix, ...hists] = await Promise.all([fixingHistory(fixFrom.toISOString().slice(0,10)), ...POSITIONS.map(p => issHistory(p.secid, start))]);
+  const capD = new Date(); capD.setDate(capD.getDate() - 365); const cap = capD.toISOString().slice(0,10);
+  const bondFrom = {};
+  for (const p of POSITIONS) { const d0 = (p.lots || []).map(l => l.date).sort()[0] || start; bondFrom[p.secid] = d0 > cap ? d0 : cap; }
+  const minFrom = Object.values(bondFrom).sort()[0];
+  const fixFrom = new Date(minFrom + "T12:00:00"); fixFrom.setDate(fixFrom.getDate() - 10);
+  const [fix, ...hists] = await Promise.all([fixingHistory(fixFrom.toISOString().slice(0,10)), ...POSITIONS.map(p => issHistory(p.secid, bondFrom[p.secid]))]);
   const perBond = {}; POSITIONS.forEach((p, i) => perBond[p.secid] = hists[i]);
   const dates = [...new Set(hists.flat().map(r => r.d))].sort();
-  HIST = {start, dates, perBond, fix};
+  HIST = {start, dates, perBond, fix, bondFrom};
   drawChart();
+  drawBondCharts();
 }
 function seriesValue(nkd) {
   // стоимость портфеля по дням: курс ЦБ на дату D = фиксинг предыдущего торгового дня
@@ -442,13 +454,15 @@ function drawChart() {
   const last = pts[pts.length-1]; const lx = X(t1), ly = Y(last.v/1e6);
   const lastLabelY = cost && Math.abs(ly - Y(cost/1e6)) < 14 ? (ly < Y(cost/1e6) ? ly - 10 : ly + 14) : ly + 4;
   g += `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text class="endlab" x="${(lx+8).toFixed(1)}" y="${lastLabelY.toFixed(1)}">${(last.v/1e6).toFixed(2)}</text>`;
-  g += `<g id="hov" style="display:none"><line class="axis" id="hovx" y1="${pt}" y2="${H-pb}" style="stroke:var(--ink);opacity:.5"/><circle id="hovc" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></g></svg>`;
+  g += `<g id="hov" class="hovg" style="display:none"><line class="axis" id="hovx" y1="${pt}" y2="${H-pb}" style="stroke:var(--ink);opacity:.5"/><circle id="hovc" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></g></svg>`;
   $("chart").innerHTML = g;
   const mn = pts.reduce((a,p) => p.v < a.v ? p : a), mx = pts.reduce((a,p) => p.v > a.v ? p : a);
   $("chartSub").textContent = `с ${HIST.start.split("-").reverse().join(".")} (последняя покупка) · ${nkd ? "с НКД" : "без НКД"} · мин ${(mn.v/1e6).toFixed(2)} (${mn.d.slice(5).split("-").reverse().join(".")}) · макс ${(mx.v/1e6).toFixed(2)} (${mx.d.slice(5).split("-").reverse().join(".")})`;
   // hover
   const svg = $("chart").querySelector("svg"), tip = $("tip");
-  svg.addEventListener("mousemove", e => {
+  const hideTip = () => { const h = svg.querySelector("#hov"); if (h) h.style.display = "none"; tip.style.display = "none"; };
+  svg.style.touchAction = "pan-y";           // вертикальная прокрутка страницы пальцем по графику работает как обычно
+  const showAt = e => {
     const r = svg.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width * W; const t = t0 + (px - pl) / (W - pl - pr) * (t1 - t0);
     let best = pts[0], bd = Infinity; for (const p of pts) { const dd = Math.abs(new Date(p.d).getTime() - t); if (dd < bd) { bd = dd; best = p; } }
     const cx = X(new Date(best.d).getTime()), cy = Y(best.v/1e6);
@@ -456,14 +470,98 @@ function drawChart() {
     svg.querySelector("#hovc").setAttribute("cx", cx); svg.querySelector("#hovc").setAttribute("cy", cy);
     const bf = fxPts.find(p => p.d === best.d);
     tip.innerHTML = `<div style="color:var(--muted)">${best.d.split("-").reverse().join(".")}${best.live ? " (сейчас)" : ""}</div><b>${(best.v/1e6).toFixed(2)} млн ₽</b>` + (cost ? `<div>${sgn(best.v - cost)} к вложениям</div>` : "") + (bf ? `<div style="color:var(--fx)">курс ЦБ ${bf.v.toFixed(4)}</div>` : "");
-    tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + "px"; tip.style.top = (e.clientY + 14) + "px";
-  });
-  svg.addEventListener("mouseleave", () => { svg.querySelector("#hov").style.display = "none"; tip.style.display = "none"; });
+    tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + "px"; tip.style.top = Math.max(8, e.clientY - 70) + "px";
+  };
+  svg.addEventListener("pointermove", showAt);
+  svg.addEventListener("pointerdown", showAt);
+  svg.addEventListener("pointerleave", hideTip);
+  svg.addEventListener("pointerup", e => { if (e.pointerType !== "mouse") hideTip(); });   // на тач-экране: убрал палец — убрали подсказку
+  svg.addEventListener("pointercancel", hideTip);
+  // подсказка не должна «зависать»: прячем при прокрутке и при касании вне графика
+  if (!window._tipGuards) {
+    window._tipGuards = true;
+    window.addEventListener("scroll", () => { $("tip").style.display = "none"; document.querySelectorAll("g.hovg").forEach(h => h.style.display = "none"); }, {passive: true});
+    document.addEventListener("pointerdown", e => { if (!e.target.closest || !e.target.closest("svg.chart")) { $("tip").style.display = "none"; document.querySelectorAll("g.hovg").forEach(h => h.style.display = "none"); } }, {passive: true});
+  }
+}
+
+// ---------- карточки по бумагам ----------
+const RUM = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+let BONDBIND = [];
+function bondCardHTML(p) {
+  const h = (HIST.perBond[p.secid] || []); const nkd = state.withNkd;
+  const it = state.data ? state.data.items.find(x => x.p.secid === p.secid) : null;
+  const pts = [];
+  for (const r of h) { const fx = asOf(HIST.fix, "v", r.d, true); if (!fx) continue; pts.push({d: r.d, v: p.qty * (r.face * r.close / 100 * fx + (nkd ? r.acc : 0)), fx}); }
+  if (it) { const today = new Date().toISOString().slice(0,10); const v = it.cleanRub + (nkd ? it.nkdRub : 0); const fx = state.data.rates.today;
+    if (pts.length && pts[pts.length-1].d === today) { pts[pts.length-1].v = v; pts[pts.length-1].fx = fx; }
+    else pts.push({d: today, v, fx, live: true}); }
+  if (pts.length < 2) return "";
+  const cost = p.cost_rub;
+  const W = 460, H = 185, pl = 48, pr = 56, ptp = 12, pb = 22;
+  const t0 = new Date(pts[0].d).getTime(), t1 = new Date(pts[pts.length-1].d).getTime();
+  const vs = pts.map(q => q.v/1e6).concat(cost ? [cost/1e6] : []);
+  let lo = Math.min(...vs), hi = Math.max(...vs); const mg = (hi - lo) * 0.08 || .5; lo -= mg; hi += mg;
+  const X = t => pl + (t - t0) / (t1 - t0 || 1) * (W - pl - pr), Y = v => H - pb - (v - lo) / (hi - lo) * (H - pb - ptp);
+  let flo = Math.min(...pts.map(q => q.fx)), fhi = Math.max(...pts.map(q => q.fx)); const fmg = (fhi - flo) * 0.08 || .5; flo -= fmg; fhi += fmg;
+  const Y2 = v => H - pb - (v - flo) / (fhi - flo) * (H - pb - ptp);
+  const span = hi - lo, raw = span / 3, mag = Math.pow(10, Math.floor(Math.log10(raw))); let step = mag; for (const k of [1,2,2.5,5,10]) { step = k * mag; if (span / step <= 4) break; }
+  let g = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W-pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="tick" x="${pl-6}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${v.toFixed(step < 1 ? 1 : 0)}</text>`;
+  const d0 = new Date(pts[0].d), d1 = new Date(pts[pts.length-1].d);
+  for (let y = d0.getFullYear(), mo = d0.getMonth() + 1; ; mo++) { if (mo > 11) { mo = 0; y++; } const dm = new Date(y, mo, 1); if (dm > d1) break; if (mo % 2 === 0) g += `<text class="tick" x="${X(dm.getTime()).toFixed(1)}" y="${H-6}" text-anchor="middle">${RUM[mo]}${mo === 0 ? " " + String(y).slice(2) : ""}</text>`; }
+  g += `<line class="axis" x1="${pl}" x2="${W-pr}" y1="${H-pb}" y2="${H-pb}"/>`;
+  const path = pts.map((q,i) => (i?"L":"M") + X(new Date(q.d).getTime()).toFixed(1) + "," + Y(q.v/1e6).toFixed(1)).join(" ");
+  const fpath = pts.map((q,i) => (i?"L":"M") + X(new Date(q.d).getTime()).toFixed(1) + "," + Y2(q.fx).toFixed(1)).join(" ");
+  g += `<path class="area" d="${path} L${X(t1).toFixed(1)},${H-pb} L${X(t0).toFixed(1)},${H-pb} Z"/><path class="line2" d="${fpath}"/><path class="line" d="${path}"/>`;
+  if (cost) { const yc = Y(cost/1e6); g += `<line class="ref" x1="${pl}" x2="${W-pr}" y1="${yc.toFixed(1)}" y2="${yc.toFixed(1)}"/>`; }
+  const lastq = pts[pts.length-1];
+  g += `<circle cx="${X(t1).toFixed(1)}" cy="${Y(lastq.v/1e6).toFixed(1)}" r="3.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text class="endlab" x="${(X(t1)+6).toFixed(1)}" y="${(Y(lastq.v/1e6)+4).toFixed(1)}">${(lastq.v/1e6).toFixed(2)}</text>`;
+  g += `<text class="tick2" x="${(W-pr+6).toFixed(1)}" y="${(Y2(lastq.fx)+4).toFixed(1)}">${lastq.fx.toFixed(1)}</text>`;
+  g += `<g class="hovg" style="display:none"><line class="bx" y1="${ptp}" y2="${H-pb}" style="stroke:var(--ink);opacity:.5;stroke-width:1"/><circle class="bc" r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></g></svg>`;
+  const id = "bc_" + p.secid;
+  BONDBIND.push({id, pts, cost, W, H, pl, pr, ptp, pb, t0, t1, lo, hi});
+  const sec = it ? it.s : {}, mrow = it ? it.m : {}, coup = it ? it.coup : {rub: null};
+  const nowV = it ? it.cleanRub + (nkd ? it.nkdRub : 0) : null;
+  const dR = (nowV != null && cost != null) ? nowV - cost : null;
+  const bought = (p.lots || []).map(l => l.date.split("-").reverse().join(".")).join(", ");
+  const sub = `${p.qty} шт · куплено ${bought} · до ${sec.MATDATE ? sec.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${mrow.YIELD ?? "—"}% · млн ₽ (левая ось), курс ЦБ (правая)`;
+  const line2 = (cost != null && nowV != null)
+    ? `вложено ${fmt(cost)} → ${fmt(nowV)} (<span class="${dR >= 0 ? "cpos" : "cneg"}">${sgn(dR)}</span>${nkd ? "" : ", без НКД"}) · купоны ${coup.rub != null ? fmt(coup.rub) : "—"}` : "";
+  return `<div class="chart-card" id="${id}"><div class="t">${short(p.name)}</div><div class="s">${sub}</div><div class="s">${line2}</div>${g}</div>`;
+}
+function drawBondCharts() {
+  const cont = $("bonds"); if (!cont || !HIST) return;
+  BONDBIND = [];
+  const key = a => { const A = state.data ? state.data.items.find(x => x.p.secid === a.secid) : null; return ((A && A.s.MATDATE) || "9999") + a.secid; };
+  const order = [...POSITIONS].sort((a, b) => key(a).localeCompare(key(b)));
+  cont.innerHTML = order.map(bondCardHTML).join("") || '<div class="sub">нет данных</div>';
+  for (const b of BONDBIND) { const el = document.getElementById(b.id); if (el) bindBondHover(el.querySelector("svg"), b); }
+}
+function bindBondHover(svg, b) {
+  if (!svg || !svg.addEventListener) return;
+  const tip = $("tip"); svg.style.touchAction = "pan-y";
+  const X = t => b.pl + (t - b.t0) / (b.t1 - b.t0 || 1) * (b.W - b.pl - b.pr), Y = v => b.H - b.pb - (v - b.lo) / (b.hi - b.lo) * (b.H - b.pb - b.ptp);
+  const hide = () => { const h = svg.querySelector(".hovg"); if (h) h.style.display = "none"; tip.style.display = "none"; };
+  const show = e => {
+    const r = svg.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width * b.W; const t = b.t0 + (px - b.pl) / (b.W - b.pl - b.pr) * (b.t1 - b.t0);
+    let best = b.pts[0], bd = Infinity; for (const q of b.pts) { const dd = Math.abs(new Date(q.d).getTime() - t); if (dd < bd) { bd = dd; best = q; } }
+    const cx = X(new Date(best.d).getTime()), cy = Y(best.v/1e6);
+    const h = svg.querySelector(".hovg"); h.style.display = "";
+    const bx = svg.querySelector(".bx"); bx.setAttribute("x1", cx); bx.setAttribute("x2", cx);
+    const bc = svg.querySelector(".bc"); bc.setAttribute("cx", cx); bc.setAttribute("cy", cy);
+    tip.innerHTML = `<div style="color:var(--muted)">${best.d.split("-").reverse().join(".")}${best.live ? " (сейчас)" : ""}</div><b>${fmt(best.v)} ₽</b>` + (b.cost ? `<div>${sgn(best.v - b.cost)} к вложениям</div>` : "") + `<div style="color:var(--fx)">курс ЦБ ${best.fx.toFixed(4)}</div>`;
+    tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + "px"; tip.style.top = Math.max(8, e.clientY - 80) + "px";
+  };
+  svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show);
+  svg.addEventListener("pointerleave", hide); svg.addEventListener("pointercancel", hide);
+  svg.addEventListener("pointerup", e => { if (e.pointerType !== "mouse") hide(); });
 }
 
 $("modeStart").onclick = () => { state.mode = "start"; render(); };
 $("modeYday").onclick  = () => { state.mode = "yday"; render(); };
-$("withNkd").onchange = e => { state.withNkd = e.target.checked; render(); if (HIST) drawChart(); };
+$("withNkd").onchange = e => { state.withNkd = e.target.checked; render(); if (HIST) { drawChart(); drawBondCharts(); } };
+$("withCp").onchange = e => { state.withCp = e.target.checked; render(); };
 $("refresh").onclick = load;
 $("setupSave").onclick = () => {
   try { const j = JSON.parse($("setupJson").value); const list = normalize(Array.isArray(j) ? j : j.positions);
