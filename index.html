@@ -6,16 +6,16 @@
 <title>Портфель — живая сводка</title>
 <style>
 :root {
-  --bg:#f5f6f4; --surface:#fcfcfb; --ink:#141816; --ink2:#525955; --muted:#878c88; --grid:#e2e4df; --axis:#c4c7c1;
+  --warn-bg:#fdf6d8; --warn-line:#e3c34a; --bg:#f5f6f4; --surface:#fcfcfb; --ink:#141816; --ink2:#525955; --muted:#878c88; --grid:#e2e4df; --axis:#c4c7c1;
   --accent:#1f6f66; --accent-ink:#155a53; --border:rgba(20,24,22,.10);
   --pos:#0a6b0a; --pos-bg:rgba(10,131,10,.10); --neg:#b3261e; --neg-bg:rgba(211,59,59,.10); --fx:#c9560f; color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg:#0f1110; --surface:#1a1c1a; --ink:#f3f4f1; --ink2:#c1c5bf; --muted:#8a8f8a; --grid:#2c2f2c; --axis:#3a3e3a;
+  --warn-bg:#2e2a14; --warn-line:#a88b1e; --bg:#0f1110; --surface:#1a1c1a; --ink:#f3f4f1; --ink2:#c1c5bf; --muted:#8a8f8a; --grid:#2c2f2c; --axis:#3a3e3a;
   --accent:#4fb3a6; --accent-ink:#7fd0c5; --border:rgba(255,255,255,.10);
   --pos:#4fd24f; --pos-bg:rgba(79,210,79,.12); --neg:#ff8a80; --neg-bg:rgba(255,138,128,.12); --fx:#f0955a; color-scheme: dark; } }
 :root[data-theme="dark"] {
-  --bg:#0f1110; --surface:#1a1c1a; --ink:#f3f4f1; --ink2:#c1c5bf; --muted:#8a8f8a; --grid:#2c2f2c; --axis:#3a3e3a;
+  --warn-bg:#2e2a14; --warn-line:#a88b1e; --bg:#0f1110; --surface:#1a1c1a; --ink:#f3f4f1; --ink2:#c1c5bf; --muted:#8a8f8a; --grid:#2c2f2c; --axis:#3a3e3a;
   --accent:#4fb3a6; --accent-ink:#7fd0c5; --border:rgba(255,255,255,.10);
   --pos:#4fd24f; --pos-bg:rgba(79,210,79,.12); --neg:#ff8a80; --neg-bg:rgba(255,138,128,.12); --fx:#f0955a; color-scheme: dark; }
 * { box-sizing: border-box; }
@@ -38,14 +38,17 @@ h1 { font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Ge
 .btn:hover { border-color: var(--accent); }
 .tw { background:var(--surface); border:1px solid var(--border); border-radius:6px; }
 table { border-collapse: collapse; width:100%; font-size:.82rem; table-layout: auto; }
-th, td { padding: 7px 6px; border-bottom: 1px solid var(--border); text-align:left; vertical-align: top; }
+th, td { padding: 7px 5px; border-bottom: 1px solid var(--border); text-align:left; vertical-align: top; }
 td.name { white-space: normal; min-width: 130px; }
 td .s { font-size:.72rem; }
 td.name .s { white-space: normal; }
 th.num, td.num { white-space: nowrap; }
+td.num .s { white-space: normal; }
 th { font-weight:600; color: var(--ink2); font-size:.78rem; position: sticky; top:0; background: var(--surface); }
 th.num, td.num { text-align:right; font-variant-numeric: tabular-nums; }
 td .s { color: var(--muted); font-size:.76rem; }
+tr.above td { background: var(--warn-bg); }
+.chart-card.above { background: var(--warn-bg); border-color: var(--warn-line); }
 tr.tot td { font-weight:600; border-top: 2px solid var(--axis); border-bottom: 0; }
 td.delta { font-weight: 600; }
 td.pos { color: var(--pos); background: var(--pos-bg); }
@@ -119,9 +122,10 @@ svg .area { fill: var(--accent); opacity:.10; }
   <th>Бумага</th><th class="num">Цена</th>
   <th class="num">Вложено</th><th class="num" id="hV1">Сейчас</th><th class="num" id="hE">Получено купонов</th>
   <th class="num" id="hD1">Δ ₽</th>
+  <th class="num" style="white-space:normal">Купоны до&nbsp;погашения</th>
   <th class="num">Купон / мес</th>
 </tr></thead>
-<tbody id="rows"><tr><td colspan="7" class="sub">Загружаю котировки MOEX и курс ЦБ…</td></tr></tbody>
+<tbody id="rows"><tr><td colspan="8" class="sub">Загружаю котировки MOEX и курс ЦБ…</td></tr></tbody>
 </table></div>
 <div class="status" id="status"></div>
 <div class="sect">По бумагам</div>
@@ -197,17 +201,18 @@ async function cbrOn(dateISO) {
 
 async function couponsReceived(p, cbrRates) {
   // купоны по лотам: с даты покупки лота по сегодня; value_rub из ISS (по курсу ЦБ на дату выплаты) либо value*курс
-  if (!p.lots || !p.lots.length) return {rub:0, usd:0, n:0};
   const j = await getJSON(`${ISS}/securities/${p.secid}/bondization.json?iss.meta=off&iss.only=coupons&coupons.columns=coupondate,value,value_rub&limit=300`);
   const today = new Date().toISOString().slice(0,10);
   let rub=0, usd=0; const dates = new Set();
+  let futUsd = 0, futN = 0, futLast = null;   // будущие купоны до погашения (на всю позицию), $ на бумагу × шт
   for (const c of rows(j.coupons)) {
-    if (!c.coupondate || c.value==null || c.coupondate > today) continue;
-    for (const lot of p.lots) {
+    if (!c.coupondate || c.value==null) continue;
+    if (c.coupondate > today) { futUsd += c.value * p.qty; futN++; futLast = c.coupondate; continue; }
+    for (const lot of (p.lots || [])) {
       if (c.coupondate > lot.date) { usd += c.value * lot.qty; rub += (c.value_rub ?? c.value * cbrRates.today) * lot.qty; dates.add(c.coupondate); }
     }
   }
-  return {rub, usd, n: dates.size};
+  return {rub, usd, n: dates.size, futUsd, futN, futLast};
 }
 
 async function yahoo() {
@@ -227,7 +232,7 @@ async function moexPerp() {
 }
 
 async function load() {
-  if (!POSITIONS.length) { $("setup").style.display = ""; $("rows").innerHTML = '<tr><td colspan="9" class="sub">Нет позиций — задайте их выше.</td></tr>'; $("status").textContent = ""; return; }
+  if (!POSITIONS.length) { $("setup").style.display = ""; $("rows").innerHTML = '<tr><td colspan="8" class="sub">Нет позиций — задайте их выше.</td></tr>'; $("status").textContent = ""; return; }
   $("setup").style.display = "none";
   $("status").textContent = "Загружаю…"; $("status").className = "status";
   try {
@@ -242,7 +247,7 @@ async function load() {
     const rates = {today: fx, prev: fxPrev, date: cbr.Date.slice(0,10), prevDate: cbr.PreviousDate.slice(0,10)};
 
     // курс на дату покупки (для Δ $ к вложениям) — один запрос на уникальную дату
-    const boughtDates = [...new Set(POSITIONS.map(p=>p.bought).filter(Boolean))];
+    const boughtDates = [...new Set(POSITIONS.flatMap(p=>[p.bought, ...(p.lots||[]).map(l=>l.date)]).filter(Boolean))];
     const fxBought = {};
     await Promise.all(boughtDates.map(async d => { fxBought[d] = await cbrOn(d); }));
 
@@ -262,9 +267,15 @@ async function load() {
       const cleanRub = face * price/100 * k * p.qty, cleanRubY = face * prev/100 * kPrev * p.qty;
       const nkdRub = accRub * p.qty, nkdRubY = accRubY * p.qty;
       const costUsd = (p.cost_rub!=null && p.bought && fxBought[p.bought]) ? p.cost_rub / fxBought[p.bought] : null;
+      // цена покупки в % номинала (с НКД и комиссией) по курсу ЦБ на даты лотов
+      let buyPct = null;
+      if (p.cost_rub!=null && face && (p.lots||[]).length && (p.lots||[]).every(l => fxBought[l.date])) {
+        const den = p.lots.reduce((a,l) => a + l.qty * face * (quasi ? fxBought[l.date] : 1), 0);
+        if (den > 0) buyPct = p.cost_rub / den * 100;
+      }
       const cpMonthUsd = quasi ? face * (s.COUPONPERCENT||0)/100/12 * p.qty : null;
       const cpMonthRub = quasi ? cpMonthUsd * fx : face*(s.COUPONPERCENT||0)/100/12*p.qty;
-      return {p, s, m, price, src, cleanRub, cleanRubY, nkdRub, nkdRubY, costUsd, cpMonthUsd, cpMonthRub, coup: coup[i], quasi};
+      return {p, s, m, price, src, cleanRub, cleanRubY, nkdRub, nkdRubY, costUsd, buyPct, cpMonthUsd, cpMonthRub, coup: coup[i], quasi};
     });
     state.data = {items, rates, yh: state.data?.yh, perp: state.data?.perp, sysTime: (Object.values(md)[0]||{}).SYSTIME};
     render();
@@ -289,7 +300,7 @@ function render() {
   $("hE").textContent = "Получено купонов";
   $("tDeltaL").textContent = (yday ? "Δ ко вчера" : "Δ к вложениям") + (nkd ? " (с НКД)" : " (без НКД)");
 
-  let T = {val:0, usd:0, cost:0, costUsd:0, dR:0, dU:0, cpR:0, cpU:0, gotR:0, gotU:0, valY:0, usdY:0, hasCost:true};
+  let T = {val:0, usd:0, cost:0, costUsd:0, dR:0, dU:0, cpR:0, cpU:0, gotR:0, gotU:0, futR:0, futU:0, valY:0, usdY:0, hasCost:true};
   const sorted = [...items].sort((a, b) => ((a.s.MATDATE || "9999") + a.p.secid).localeCompare((b.s.MATDATE || "9999") + b.p.secid));
   const html = sorted.map(it => {
     const {p, s, m, coup} = it;
@@ -302,21 +313,24 @@ function render() {
       else { dR = it.valRub - p.cost_rub; dU = it.costUsd!=null ? it.valUsd - it.costUsd : null; base = p.cost_rub; }
     }
     const earned = coup.rub;                                   // только полученные купоны, ₽ по ЦБ на даты выплат
+    const futR = (coup.futUsd!=null && !coup.err) ? coup.futUsd * fx : null;   // будущие купоны до погашения по текущему курсу ЦБ
     const earnedP = (earned!=null && p.cost_rub) ? earned / p.cost_rub * 100 : null;
     const dP = (dR!=null && base) ? dR/base*100 : null;
     const cls = v => v==null ? "flat" : (v > 0.5 ? "pos" : v < -0.5 ? "neg" : "flat");
     T.val += it.valRub; T.usd += it.valUsd; T.valY += it.valRubY; T.usdY += it.valUsdY;
     if (p.cost_rub!=null) { T.cost += p.cost_rub; T.costUsd += it.costUsd||0; } else T.hasCost=false;
     if (dR!=null) T.dR += dR; if (dU!=null) T.dU += dU;
-    T.cpR += it.cpMonthRub||0; T.cpU += it.cpMonthUsd||0; T.gotR += coup.rub||0; T.gotU += coup.usd||0;
+    T.cpR += it.cpMonthRub||0; T.cpU += it.cpMonthUsd||0; T.gotR += coup.rub||0; T.gotU += coup.usd||0; T.futR += futR||0; T.futU += coup.futUsd||0;
     const upd = m.UPDATETIME ? ` · ${m.UPDATETIME.slice(0,5)}` : "";
-    return `<tr>
+    const above = it.buyPct != null && it.buyPct > 100;
+    return `<tr class="${above ? "above" : ""}">
       <td class="name">${short(p.name)}<div class="s">${p.qty} шт · до ${s.MATDATE ? s.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${m.YIELD ?? "—"}%${upd}</div></td>
-      <td class="num">${it.price!=null ? it.price.toFixed(2)+"%" : "—"}${it.src==="prev" ? '<span class="mark">*</span>' : ""}<div class="s">${m.BID ?? "—"} / ${m.OFFER ?? "—"}</div></td>
+      <td class="num">${it.price!=null ? it.price.toFixed(2)+"%" : "—"}${it.src==="prev" ? '<span class="mark">*</span>' : ""}<div class="s">${m.BID!=null ? (+m.BID).toFixed(2) : "—"}&nbsp;/&nbsp;${m.OFFER!=null ? (+m.OFFER).toFixed(2) : "—"}</div>${it.buyPct != null ? `<div class="s">куплено&nbsp;${it.buyPct.toFixed(2)}%</div>` : ""}</td>
       <td class="num">${p.cost_rub!=null ? fmt(p.cost_rub) : "—"}<div class="s">${it.costUsd!=null ? fmt(it.costUsd)+" $" : ""}</div></td>
       <td class="num ${cls(p.cost_rub!=null ? it.valRub - p.cost_rub : null)}">${fmt(it.valRub)}<div class="s">${fmt(it.valUsd)} $ · ${fmt(it.valRub/p.qty)} за шт</div></td>
       <td class="num ${earned>0 ? "pos" : "flat"}">${earned!=null ? fmt(earned) : "—"}<div class="s">${earned!=null ? fmt(coup.usd) + " $ · " + coup.n + " выпл." + (earnedP!=null ? " · " + earnedP.toFixed(1) + "%" : "") : (coup.err ? "не загрузилось" : "")}</div></td>
       <td class="num delta ${cls(dR)}">${sgn(dR)}<div class="s">${pct(dP)}</div></td>
+      <td class="num">${futR!=null ? fmt(futR) : "—"}<div class="s">${futR!=null ? fmt(coup.futUsd) + " $ · " + coup.futN + " выпл." : (coup.err ? "не загрузилось" : "")}</div></td>
       <td class="num">${fmt(it.cpMonthRub)}<div class="s">${it.cpMonthUsd!=null ? fmt(it.cpMonthUsd)+" $ · "+(s.COUPONPERCENT??"")+"%" : ""}</div></td>
     </tr>`;
   }).join("");
@@ -328,6 +342,7 @@ function render() {
     <td class="num ${clsT(T.hasCost ? T.val - T.cost : null)}">${fmt(T.val)}<div class="s">${fmt(T.usd)} $</div></td>
     <td class="num ${T.gotR>0 ? "pos" : "flat"}">${fmt(T.gotR)}<div class="s">${fmt(T.gotU)} $${T.hasCost ? " · " + (T.gotR/T.cost*100).toFixed(1) + "%" : ""}</div></td>
     <td class="num delta ${clsT(T.dR)}">${sgn(T.dR)}<div class="s">${pct(dPT)}</div></td>
+    <td class="num">${fmt(T.futR)}<div class="s">${fmt(T.futU)} $</div></td>
     <td class="num">${fmt(T.cpR)}<div class="s">${fmt(T.cpU)} $</div></td></tr>`;
 
   $("tVal").textContent = fmt(T.val/1e6, 2) + " млн ₽";
@@ -524,10 +539,12 @@ function bondCardHTML(p) {
   const nowV = it ? it.cleanRub + (nkd ? it.nkdRub : 0) : null;
   const dR = (nowV != null && cost != null) ? nowV - cost : null;
   const bought = (p.lots || []).map(l => l.date.split("-").reverse().join(".")).join(", ");
-  const sub = `${p.qty} шт · куплено ${bought} · до ${sec.MATDATE ? sec.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${mrow.YIELD ?? "—"}% · млн ₽ (левая ось), курс ЦБ (правая)`;
+  const buyTxt = (it && it.buyPct != null) ? ` по ${it.buyPct.toFixed(2)}%` : "";
+  const above = it && it.buyPct != null && it.buyPct > 100;
+  const sub = `${p.qty} шт · куплено ${bought}${buyTxt} · до ${sec.MATDATE ? sec.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${mrow.YIELD ?? "—"}% · млн ₽ (левая ось), курс ЦБ (правая)`;
   const line2 = (cost != null && nowV != null)
     ? `вложено ${fmt(cost)} → ${fmt(nowV)} (<span class="${dR >= 0 ? "cpos" : "cneg"}">${sgn(dR)}</span>${nkd ? "" : ", без НКД"}) · купоны ${coup.rub != null ? fmt(coup.rub) : "—"}` : "";
-  return `<div class="chart-card" id="${id}"><div class="t">${short(p.name)}</div><div class="s">${sub}</div><div class="s">${line2}</div>${g}</div>`;
+  return `<div class="chart-card${above ? " above" : ""}" id="${id}"><div class="t">${short(p.name)}</div><div class="s">${sub}</div><div class="s">${line2}</div>${g}</div>`;
 }
 function drawBondCharts() {
   const cont = $("bonds"); if (!cont || !HIST) return;
