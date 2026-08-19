@@ -48,7 +48,12 @@ th { font-weight:600; color: var(--ink2); font-size:.78rem; position: sticky; to
 th.num, td.num { text-align:right; font-variant-numeric: tabular-nums; }
 td .s { color: var(--muted); font-size:.76rem; }
 tr.above td { background: var(--warn-bg); }
+tr.closed td.name { color: var(--ink2); }
+tr.sep td { border-top: 1px dashed var(--axis); }
+.badge { display:inline-block; font-size:.68rem; line-height:1.4; padding:0 5px; border-radius:3px; border:1px solid var(--border); background:var(--bg); color:var(--muted); margin-left:5px; vertical-align:middle; white-space:nowrap; }
 .chart-card.above { background: var(--warn-bg); border-color: var(--warn-line); }
+.chart-card.closed { border-style: dashed; }
+.chart-card.closed .t { color: var(--ink2); }
 tr.tot td { font-weight:600; border-top: 2px solid var(--axis); border-bottom: 0; }
 td.delta { font-weight: 600; }
 td.pos { color: var(--pos); background: var(--pos-bg); }
@@ -58,11 +63,15 @@ td.flat { color: var(--ink2); }
 .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding: 12px 14px 6px; margin-bottom: 14px; }
 .chart-card .t { font-weight:600; font-size:.95rem; }
 .chart-card .s { color: var(--muted); font-size:.8rem; margin-bottom: 4px; }
+.chead { display:flex; justify-content:space-between; align-items:flex-start; gap: 6px 16px; flex-wrap:wrap; }
+.seg-sm button { padding: 5px 11px; font-size:.82rem; }
 svg.chart { display:block; overflow:visible; width:100%; height:auto; }
 svg .grid { stroke: var(--grid); stroke-width:1; } svg .axis { stroke: var(--axis); stroke-width:1; }
 svg .tick { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
 svg .endlab { font-size: 12px; fill: var(--ink); font-weight:600; font-variant-numeric: tabular-nums; }
 svg .ref { stroke: var(--muted); stroke-width:1; } svg .reflab { font-size: 11px; fill: var(--muted); }
+svg .sale { stroke: var(--muted); stroke-width:1; stroke-dasharray: 3 3; opacity:.85; }
+svg .salelab { font-size: 10px; fill: var(--muted); }
 svg .line { fill:none; stroke: var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
 svg .line2 { fill:none; stroke: var(--fx); stroke-width:1.5; stroke-linejoin:round; stroke-linecap:round; }
 svg .tick2 { font-size: 11px; fill: var(--fx); font-variant-numeric: tabular-nums; }
@@ -105,9 +114,19 @@ svg .area { fill: var(--accent); opacity:.10; }
 </div>
 
 <div class="chart-card" id="chartCard">
-  <div class="t">Стоимость портфеля, млн ₽ · курс ЦБ, ₽/$</div>
-  <div class="s" id="chartSub">с даты последней покупки · по закрытиям MOEX и курсу ЦБ (фиксинг USDFIXME)</div>
-  <div class="legend"><span><i style="background:var(--accent)"></i>стоимость портфеля, млн ₽ (левая ось)</span><span><i style="background:var(--fx)"></i>курс ЦБ, ₽/$ (правая ось)</span></div>
+  <div class="chead">
+    <div>
+      <div class="t">Стоимость портфеля, млн ₽ · курс ЦБ, ₽/$</div>
+      <div class="s" id="chartSub">с даты последней покупки · по закрытиям MOEX и курсу ЦБ (фиксинг USDFIXME)</div>
+    </div>
+    <div class="seg seg-sm" id="rangeSeg" role="group" aria-label="Масштаб графиков">
+      <button data-range="y" aria-pressed="true">1 год</button>
+      <button data-range="m" aria-pressed="false">1 мес</button>
+      <button data-range="w" aria-pressed="false">1 нед</button>
+      <button data-range="d" aria-pressed="false">Сегодня</button>
+    </div>
+  </div>
+  <div class="legend" id="legend"><span><i style="background:var(--accent)"></i>стоимость портфеля, млн ₽ (левая ось)</span><span><i style="background:var(--fx)"></i>курс ЦБ, ₽/$ (правая ось)</span></div>
   <div id="chart"><div class="sub">загружаю историю…</div></div>
 </div>
 <div class="tip" id="tip"></div>
@@ -139,7 +158,13 @@ svg .area { fill: var(--accent); opacity:.10; }
 
 Рыночный курс — Yahoo Finance через публичный прокси allorigins (как в приложении «Акции» на iPhone), контроль — вечный фьючерс USDRUBF на MOEX.
 Δ $ к вложениям — вложения переведены в доллары по курсу ЦБ на дату покупки.
-Позиции — из portfolio.json (перегенерировать: python3 dashboard.py).</p>
+Позиции — из portfolio.json (перегенерировать: python3 dashboard.py).
+
+Закрытые позиции (поле <code>closed</code> — дата и время продажи по Москве) не переоцениваются: цена берётся на момент продажи
+(10-минутная свеча MOEX за эту минуту, если её нет — закрытие того дня), НКД и номинал — за ту же дату, курс — ЦБ на день продажи.
+«Сейчас» по такой строке — выручка от продажи, Δ — зафиксированный результат, «Δ ко вчера» по ней всегда пусто, купоны — только до дня продажи,
+будущих купонов и купона в месяц нет. На графике портфеля с момента продажи (пунктирная отметка) позиция входит выручкой, а не котировкой —
+поэтому линия не проваливается; на карточке бумаги линия обрывается в момент продажи.</p>
 </div>
 
 <script>
@@ -147,7 +172,7 @@ const EMBEDDED = null;   // локальная версия: позиции за
 const LS_KEY = "markets.positions.v1";
 function normalize(list) {
   return (list || []).map(p => ({secid: p.secid, name: p.name || p.secid, qty: +p.qty, cost_rub: p.cost_rub ?? null,
-    bought: p.bought || null, lots: (p.lots && p.lots.length) ? p.lots.map(l => ({date: l.date, qty: +l.qty})) : (p.bought ? [{date: p.bought, qty: +p.qty}] : [])}));
+    bought: p.bought || null, closed: p.closed || null, lots: (p.lots && p.lots.length) ? p.lots.map(l => ({date: l.date, qty: +l.qty})) : (p.bought ? [{date: p.bought, qty: +p.qty}] : [])}));
 }
 function fromHash() {
   const m = location.hash.match(/[#&]p=([A-Za-z0-9_-]+)/); if (!m) return null;
@@ -171,7 +196,18 @@ const sgn = (n, d=0) => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + fmt(n, d)
 const pct = n => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + n.toFixed(2) + "%";
 const short = s => s.replace("Газпром капитал","ГазКап").replace("ЕвразХолдинг Финанс","Евраз").replace("СИБУР Холдинг","СИБУР").replace("Акрон (ПАО)","Акрон").replace("ПОЛЮС","Полюс");
 
-let state = { mode: "start", withNkd: true, data: null };
+// ---------- закрытые позиции: "YYYY-MM-DD" или "YYYY-MM-DD HH:MM" (МСК) ----------
+const closedDay  = p => p.closed ? p.closed.slice(0,10) : null;
+const closedTime = p => (p.closed && p.closed.length > 10) ? p.closed.slice(11,16) : null;
+const saleTs = c => Date.parse(c.slice(0,10) + "T" + (c.length > 10 ? c.slice(11,16) : "23:59") + ":00+03:00");
+const closedTs   = p => p.closed ? saleTs(p.closed) : null;
+const closedLbl  = p => p.closed ? closedDay(p).split("-").reverse().join(".") + (closedTime(p) ? " " + closedTime(p) : "") : "";
+
+let state = { mode: "start", withNkd: true, data: null, range: "y" };
+const RANGE_DAYS = {y: 365, m: 30, w: 7};                      // масштаб графиков; "d" — сегодня (внутри дня)
+const RANGE_LBL = {y: "1 год", m: "1 месяц", w: "1 неделя", d: "сегодня"};
+const RANGE_KEY = "markets.range.v1";
+try { const r = localStorage.getItem(RANGE_KEY); if (r && (RANGE_DAYS[r] || r === "d")) state.range = r; } catch (e) {}
 
 async function getJSON(url, timeoutMs = 20000, retries = 2) {
   let lastErr;
@@ -202,17 +238,42 @@ async function cbrOn(dateISO) {
 async function couponsReceived(p, cbrRates) {
   // купоны по лотам: с даты покупки лота по сегодня; value_rub из ISS (по курсу ЦБ на дату выплаты) либо value*курс
   const j = await getJSON(`${ISS}/securities/${p.secid}/bondization.json?iss.meta=off&iss.only=coupons&coupons.columns=coupondate,value,value_rub&limit=300`);
-  const today = new Date().toISOString().slice(0,10);
+  const until = closedDay(p) || new Date().toISOString().slice(0,10);   // по закрытой позиции купоны идут только до дня продажи
   let rub=0, usd=0; const dates = new Set();
   let futUsd = 0, futN = 0, futLast = null;   // будущие купоны до погашения (на всю позицию), $ на бумагу × шт
   for (const c of rows(j.coupons)) {
     if (!c.coupondate || c.value==null) continue;
-    if (c.coupondate > today) { futUsd += c.value * p.qty; futN++; futLast = c.coupondate; continue; }
+    if (c.coupondate > until) { if (!p.closed) { futUsd += c.value * p.qty; futN++; futLast = c.coupondate; } continue; }
     for (const lot of (p.lots || [])) {
       if (c.coupondate > lot.date) { usd += c.value * lot.qty; rub += (c.value_rub ?? c.value * cbrRates.today) * lot.qty; dates.add(c.coupondate); }
     }
   }
   return {rub, usd, n: dates.size, futUsd, futN, futLast};
+}
+
+async function closeSnap(p, s) {
+  // цена и НКД на момент закрытия позиции: 10-минутная свеча за минуту продажи, иначе закрытие того дня.
+  // Данные исторические и больше не меняются — кладём в localStorage, чтобы не дёргать ISS при каждом обновлении.
+  const key = "markets.close.v1:" + p.secid + ":" + p.closed;
+  try { const c = JSON.parse(localStorage.getItem(key) || "null"); if (c && c.price != null) return c; } catch (e) {}
+  const day = closedDay(p), tm = closedTime(p);
+  let price = null, src = "close", acc = null, face = null;
+  if (tm) {
+    try {
+      const j = await getJSON(`${ISS}/engines/stock/markets/bonds/boards/TQCB/securities/${p.secid}/candles.json?iss.meta=off&interval=10&from=${day}&till=${day}&candles.columns=begin,close`);
+      const cs = rows(j.candles).filter(c => c.close != null && c.begin.slice(11,16) <= tm);
+      if (cs.length) { price = cs[cs.length-1].close; src = "candle"; }
+    } catch (e) { console.warn("close candles", p.secid, e); }
+  }
+  try {   // НКД и номинал на дату закрытия (и цена закрытия, если свечей не нашлось)
+    const j = await getJSON(`${ISS}/history/engines/stock/markets/bonds/boards/TQCB/securities/${p.secid}.json?iss.meta=off&from=${day}&till=${day}&history.columns=TRADEDATE,CLOSE,LEGALCLOSEPRICE,WAPRICE,ACCINT,FACEVALUE`);
+    const r = rows(j.history).slice(-1)[0];
+    if (r) { acc = r.ACCINT; face = r.FACEVALUE; if (price == null) { price = r.CLOSE ?? r.LEGALCLOSEPRICE ?? r.WAPRICE; src = "close"; } }
+  } catch (e) { console.warn("close history", p.secid, e); }
+  if (price == null && s.PREVPRICE != null) { price = s.PREVPRICE; src = "prev"; }
+  const snap = {price, acc, face, src};
+  if (price != null && acc != null) { try { localStorage.setItem(key, JSON.stringify(snap)); } catch (e) {} }   // кэшируем только полный снимок
+  return snap;
 }
 
 async function yahoo() {
@@ -247,12 +308,15 @@ async function load() {
     const rates = {today: fx, prev: fxPrev, date: cbr.Date.slice(0,10), prevDate: cbr.PreviousDate.slice(0,10)};
 
     // курс на дату покупки (для Δ $ к вложениям) — один запрос на уникальную дату
-    const boughtDates = [...new Set(POSITIONS.flatMap(p=>[p.bought, ...(p.lots||[]).map(l=>l.date)]).filter(Boolean))];
+    const fxDates = [...new Set(POSITIONS.flatMap(p=>[p.bought, closedDay(p), ...(p.lots||[]).map(l=>l.date)]).filter(Boolean))];
     const fxBought = {};
-    await Promise.all(boughtDates.map(async d => { fxBought[d] = await cbrOn(d); }));
+    await Promise.all(fxDates.map(async d => { fxBought[d] = await cbrOn(d); }));
 
     const coup = await Promise.all(POSITIONS.map(p => couponsReceived(p, rates).catch(e => { console.warn("coupons", p.secid, e); return {rub:null,usd:null,n:0,err:true}; })));
     const cpErr = coup.filter(c => c.err).length;
+    // закрытые позиции: цена, НКД и номинал на момент продажи
+    const snaps = await Promise.all(POSITIONS.map(p => p.closed
+      ? closeSnap(p, sec[p.secid] || {}).catch(e => { console.warn("close", p.secid, e); return null; }) : Promise.resolve(null)));
 
     const items = POSITIONS.map((p,i) => {
       const s = sec[p.secid] || {}, m = md[p.secid] || {};
@@ -275,12 +339,24 @@ async function load() {
       }
       const cpMonthUsd = quasi ? face * (s.COUPONPERCENT||0)/100/12 * p.qty : null;
       const cpMonthRub = quasi ? cpMonthUsd * fx : face*(s.COUPONPERCENT||0)/100/12*p.qty;
-      return {p, s, m, price, src, cleanRub, cleanRubY, nkdRub, nkdRubY, costUsd, buyPct, cpMonthUsd, cpMonthRub, coup: coup[i], quasi};
+      const it = {p, s, m, price, src, cleanRub, cleanRubY, nkdRub, nkdRubY, costUsd, buyPct, cpMonthUsd, cpMonthRub, coup: coup[i], quasi};
+      if (p.closed) {                      // позиция закрыта — всё замораживаем на момент продажи
+        const snap = snaps[i] || {}, fxC = fxBought[closedDay(p)] || fx, fc = snap.face || face;
+        it.fxClose = fxC; it.closeSrc = snap.src || null;
+        if (snap.price != null) { it.price = snap.price; it.src = "closed"; }
+        if (snap.price != null && fc) it.cleanRub = fc * snap.price/100 * (quasi ? fxC : 1) * p.qty;
+        if (snap.acc != null) it.nkdRub = snap.acc * p.qty;
+        it.cleanRubY = it.cleanRub; it.nkdRubY = it.nkdRub;    // после продажи цена не движется → Δ за день нулевая
+        it.cpMonthUsd = it.cpMonthRub = null;                  // купоны по ней больше не идут
+      }
+      return it;
     });
     state.data = {items, rates, yh: state.data?.yh, perp: state.data?.perp, sysTime: (Object.values(md)[0]||{}).SYSTIME};
     render();
     $("status").textContent = cpErr ? `Купоны не загрузились по ${cpErr} бумаг(е) — «Заработано» там без купонов; нажмите «Обновить».` : "";
-    if (!HIST) loadHistory().catch(e => { $("chart").innerHTML = '<div class="sub">история не загрузилась: ' + e.message + '</div>'; }); else { drawChart(); drawBondCharts(); }
+    if (!HIST) loadHistory().catch(e => { $("chart").innerHTML = '<div class="sub">история не загрузилась: ' + e.message + '</div>'; });
+    else if (state.range === "d") loadIntraday().then(redrawCharts).catch(e => { console.warn("intraday", e); redrawCharts(); });
+    else redrawCharts();
     // рыночный курс — отдельно, чтобы не задерживать таблицу
     Promise.all([yahoo(), moexPerp()]).then(([yh, perp]) => { if (state.data) { state.data.yh = yh; state.data.perp = perp; renderFx(); } });
   } catch (e) {
@@ -300,12 +376,15 @@ function render() {
   $("hE").textContent = "Получено купонов";
   $("tDeltaL").textContent = (yday ? "Δ ко вчера" : "Δ к вложениям") + (nkd ? " (с НКД)" : " (без НКД)");
 
-  let T = {val:0, usd:0, cost:0, costUsd:0, dR:0, dU:0, cpR:0, cpU:0, gotR:0, gotU:0, futR:0, futU:0, valY:0, usdY:0, hasCost:true};
-  const sorted = [...items].sort((a, b) => ((a.s.MATDATE || "9999") + a.p.secid).localeCompare((b.s.MATDATE || "9999") + b.p.secid));
-  const html = sorted.map(it => {
+  let T = {val:0, usd:0, cost:0, costUsd:0, dR:0, dU:0, cpR:0, cpU:0, gotR:0, gotU:0, futR:0, futU:0, valY:0, usdY:0, hasCost:true, nClosed:0, closedVal:0, closedD:0};
+  const sorted = [...items].sort((a, b) => (a.p.closed ? 1 : 0) - (b.p.closed ? 1 : 0)                       // закрытые — в конец таблицы
+    || ((a.s.MATDATE || "9999") + a.p.secid).localeCompare((b.s.MATDATE || "9999") + b.p.secid));
+  const firstClosed = sorted.findIndex(x => x.p.closed);
+  const html = sorted.map((it, ix) => {
     const {p, s, m, coup} = it;
-    it.valRub = it.cleanRub + (nkd ? it.nkdRub : 0);   it.valUsd = it.valRub / fx;
-    it.valRubY = it.cleanRubY + (nkd ? it.nkdRubY : 0); it.valUsdY = it.valRubY / fxPrev;
+    const cl = !!p.closed;
+    it.valRub = it.cleanRub + (nkd ? it.nkdRub : 0);   it.valUsd = it.valRub / (it.fxClose || fx);
+    it.valRubY = it.cleanRubY + (nkd ? it.nkdRubY : 0); it.valUsdY = it.valRubY / (it.fxClose || fxPrev);
     let dR, dU, base;
     if (yday) { dR = it.valRub - it.valRubY; dU = it.valUsd - it.valUsdY; base = it.valRubY; }
     else {
@@ -321,37 +400,42 @@ function render() {
     if (p.cost_rub!=null) { T.cost += p.cost_rub; T.costUsd += it.costUsd||0; } else T.hasCost=false;
     if (dR!=null) T.dR += dR; if (dU!=null) T.dU += dU;
     T.cpR += it.cpMonthRub||0; T.cpU += it.cpMonthUsd||0; T.gotR += coup.rub||0; T.gotU += coup.usd||0; T.futR += futR||0; T.futU += coup.futUsd||0;
+    if (cl) { T.nClosed++; T.closedVal += it.valRub; T.closedD += dR||0; }
     const upd = m.UPDATETIME ? ` · ${m.UPDATETIME.slice(0,5)}` : "";
     const above = it.buyPct != null && it.buyPct > 100;
-    return `<tr class="${above ? "above" : ""}">
-      <td class="name">${short(p.name)}<div class="s">${p.qty} шт · до ${s.MATDATE ? s.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${m.YIELD ?? "—"}%${upd}</div></td>
-      <td class="num">${it.price!=null ? it.price.toFixed(2)+"%" : "—"}${it.src==="prev" ? '<span class="mark">*</span>' : ""}<div class="s">${m.BID!=null ? (+m.BID).toFixed(2) : "—"}&nbsp;/&nbsp;${m.OFFER!=null ? (+m.OFFER).toFixed(2) : "—"}</div>${it.buyPct != null ? `<div class="s">куплено&nbsp;${it.buyPct.toFixed(2)}%</div>` : ""}</td>
+    const frozen = cl && yday;                                  // закрытая позиция за день не двигается
+    return `<tr class="${cl ? "closed" : above ? "above" : ""}${ix === firstClosed ? " sep" : ""}">
+      <td class="name">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}<div class="s">${p.qty} шт · ${cl ? "продана " + closedLbl(p) : `до ${s.MATDATE ? s.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${m.YIELD ?? "—"}%${upd}`}</div></td>
+      <td class="num">${it.price!=null ? it.price.toFixed(2)+"%" : "—"}${it.src==="prev" ? '<span class="mark">*</span>' : ""}<div class="s">${cl ? "цена продажи" : `${m.BID!=null ? (+m.BID).toFixed(2) : "—"}&nbsp;/&nbsp;${m.OFFER!=null ? (+m.OFFER).toFixed(2) : "—"}`}</div>${it.buyPct != null ? `<div class="s">куплено&nbsp;${it.buyPct.toFixed(2)}%</div>` : ""}</td>
       <td class="num">${p.cost_rub!=null ? fmt(p.cost_rub) : "—"}<div class="s">${it.costUsd!=null ? fmt(it.costUsd)+" $" : ""}</div></td>
-      <td class="num ${cls(p.cost_rub!=null ? it.valRub - p.cost_rub : null)}">${fmt(it.valRub)}<div class="s">${fmt(it.valUsd)} $ · ${fmt(it.valRub/p.qty)} за шт</div></td>
-      <td class="num ${earned>0 ? "pos" : "flat"}">${earned!=null ? fmt(earned) : "—"}<div class="s">${earned!=null ? fmt(coup.usd) + " $ · " + coup.n + " выпл." + (earnedP!=null ? " · " + earnedP.toFixed(1) + "%" : "") : (coup.err ? "не загрузилось" : "")}</div></td>
-      <td class="num delta ${cls(dR)}">${sgn(dR)}<div class="s">${pct(dP)}</div></td>
-      <td class="num">${futR!=null ? fmt(futR) : "—"}<div class="s">${futR!=null ? fmt(coup.futUsd) + " $ · " + coup.futN + " выпл." : (coup.err ? "не загрузилось" : "")}</div></td>
-      <td class="num">${fmt(it.cpMonthRub)}<div class="s">${it.cpMonthUsd!=null ? fmt(it.cpMonthUsd)+" $ · "+(s.COUPONPERCENT??"")+"%" : ""}</div></td>
+      <td class="num ${cls(p.cost_rub!=null ? it.valRub - p.cost_rub : null)}">${fmt(it.valRub)}<div class="s">${fmt(it.valUsd)} $ · ${cl ? "выручка от продажи" : fmt(it.valRub/p.qty) + " за шт"}</div></td>
+      <td class="num ${earned>0 ? "pos" : "flat"}">${earned!=null ? fmt(earned) : "—"}<div class="s">${earned!=null ? fmt(coup.usd) + " $ · " + coup.n + " выпл." + (earnedP!=null ? " · " + earnedP.toFixed(1) + "%" : "") + (cl ? " · до продажи" : "") : (coup.err ? "не загрузилось" : "")}</div></td>
+      <td class="num delta ${cls(frozen ? null : dR)}">${frozen ? "—" : sgn(dR)}<div class="s">${frozen ? "закрыта" : pct(dP)}</div></td>
+      <td class="num">${cl ? "—" : (futR!=null ? fmt(futR) : "—")}<div class="s">${cl ? "позиция закрыта" : (futR!=null ? fmt(coup.futUsd) + " $ · " + coup.futN + " выпл." : (coup.err ? "не загрузилось" : ""))}</div></td>
+      <td class="num">${cl ? "—" : fmt(it.cpMonthRub)}<div class="s">${cl ? "" : (it.cpMonthUsd!=null ? fmt(it.cpMonthUsd)+" $ · "+(s.COUPONPERCENT??"")+"%" : "")}</div></td>
     </tr>`;
   }).join("");
   const baseT = yday ? T.valY : (T.hasCost ? T.cost : null);
   const dPT = baseT ? T.dR/baseT*100 : null;
   const clsT = v => v==null ? "flat" : (v > 0.5 ? "pos" : v < -0.5 ? "neg" : "flat");
-  $("rows").innerHTML = html + `<tr class="tot"><td>Итого<div class="s">${items.length} поз.</div></td><td></td>
+  $("rows").innerHTML = html + `<tr class="tot"><td>Итого<div class="s">${items.length} поз.${T.nClosed ? ` · ${T.nClosed} закрыто` : ""}</div></td><td></td>
     <td class="num">${T.hasCost ? fmt(T.cost) : "—"}<div class="s">${T.hasCost ? fmt(T.costUsd)+" $" : ""}</div></td>
-    <td class="num ${clsT(T.hasCost ? T.val - T.cost : null)}">${fmt(T.val)}<div class="s">${fmt(T.usd)} $</div></td>
+    <td class="num ${clsT(T.hasCost ? T.val - T.cost : null)}">${fmt(T.val)}<div class="s">${fmt(T.usd)} $${T.nClosed ? ` · из них ${fmt(T.closedVal)} выручка` : ""}</div></td>
     <td class="num ${T.gotR>0 ? "pos" : "flat"}">${fmt(T.gotR)}<div class="s">${fmt(T.gotU)} $${T.hasCost ? " · " + (T.gotR/T.cost*100).toFixed(1) + "%" : ""}</div></td>
     <td class="num delta ${clsT(T.dR)}">${sgn(T.dR)}<div class="s">${pct(dPT)}</div></td>
     <td class="num">${fmt(T.futR)}<div class="s">${fmt(T.futU)} $</div></td>
     <td class="num">${fmt(T.cpR)}<div class="s">${fmt(T.cpU)} $</div></td></tr>`;
 
   $("tVal").textContent = fmt(T.val/1e6, 2) + " млн ₽";
-  $("tValUsd").textContent = fmt(T.usd) + " $ по ЦБ " + rates.today.toFixed(2);
+  $("tValUsd").textContent = fmt(T.usd) + " $ по ЦБ " + rates.today.toFixed(2)
+    + (T.nClosed ? ` · вкл. ${fmt(T.closedVal/1e6, 2)} млн от ${T.nClosed} закрытых` : "");
   $("tDelta").textContent = sgn(T.dR/1e6, 2) + " млн ₽";
   $("tDelta").style.color = T.dR > 0 ? "var(--pos)" : T.dR < 0 ? "var(--neg)" : "";
-  $("tDeltaSub").textContent = (dPT!=null ? pct(dPT) : "—") + " · " + sgn(T.dU) + " $" + (yday ? ` · курс ${rates.prev.toFixed(2)} → ${rates.today.toFixed(2)}` : "");
+  $("tDeltaSub").textContent = (dPT!=null ? pct(dPT) : "—") + " · " + sgn(T.dU) + " $" + (yday ? ` · курс ${rates.prev.toFixed(2)} → ${rates.today.toFixed(2)}` : "")
+    + (!yday && T.nClosed ? ` · из них ${sgn(T.closedD/1e6, 2)} млн зафиксировано` : "");
   $("tCoup").textContent = fmt(T.cpR) + " ₽";
-  $("tCoupUsd").textContent = fmt(T.cpU) + " $ в месяц · " + fmt(T.cpR*12/1e6, 2) + " млн ₽ в год";
+  $("tCoupUsd").textContent = fmt(T.cpU) + " $ в месяц · " + fmt(T.cpR*12/1e6, 2) + " млн ₽ в год"
+    + (T.nClosed ? ` · по ${items.length - T.nClosed} открытым` : "");
   $("tFx").textContent = rates.today.toFixed(4);
   $("tFxSub").textContent = `на ${rates.date.split("-").reverse().join(".")} · пред. ${rates.prev.toFixed(4)} (${sgn(rates.today-rates.prev, 4)})`;
   renderFx();
@@ -409,16 +493,19 @@ async function loadHistory() {
   const perBond = {}; POSITIONS.forEach((p, i) => perBond[p.secid] = hists[i]);
   const dates = [...new Set(hists.flat().map(r => r.d))].sort();
   HIST = {start, dates, perBond, fix, bondFrom};
-  drawChart();
-  drawBondCharts();
+  if (state.range === "d") await loadIntraday().catch(e => console.warn("intraday", e));
+  redrawCharts();
 }
 function seriesValue(nkd) {
   // стоимость портфеля по дням: курс ЦБ на дату D = фиксинг предыдущего торгового дня
+  // с дня продажи закрытая позиция входит в линию не котировкой, а выручкой — портфель не «проваливается»
+  const byId = state.data ? Object.fromEntries(state.data.items.map(x => [x.p.secid, x])) : {};
   const pts = [];
   for (const d of HIST.dates) {
     const fx = asOf(HIST.fix, "v", d, true); if (!fx) continue;
     let v = 0, ok = true;
     for (const p of POSITIONS) {
+      if (p.closed && d >= closedDay(p)) { const x = byId[p.secid]; if (!x) { ok = false; break; } v += x.cleanRub + (nkd ? x.nkdRub : 0); continue; }
       const h = HIST.perBond[p.secid]; let row = null; for (const r of h) { if (r.d <= d) row = r; else break; }
       if (!row) { ok = false; break; }
       v += p.qty * (row.face * row.close / 100 * fx + (nkd ? row.acc : 0));
@@ -431,59 +518,200 @@ function seriesValue(nkd) {
     const v = it.reduce((a, x) => a + x.cleanRub + (nkd ? x.nkdRub : 0), 0);
     if (pts.length && pts[pts.length-1].d === today) pts[pts.length-1].v = v; else pts.push({d: today, v, live: true});
   }
+  return pts.map(q => ({...q, t: Date.parse(q.d)}));
+}
+// ---------- масштаб графиков: 1 год / 1 мес / 1 неделя / сегодня ----------
+const MSKTZ = "Europe/Moscow", DAYMS = 864e5;
+const mskDay  = t => new Date(t).toLocaleDateString("sv-SE", {timeZone: MSKTZ});                                   // YYYY-MM-DD по Москве
+const mskTime = t => new Date(t).toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit", timeZone: MSKTZ});
+const redrawCharts = () => { drawChart(); drawBondCharts(); };
+const dmy = d => d.split("-").reverse().join(".");
+const ptLabel = q => (state.range === "d" || q.sale ? dmy(q.d) + " " + mskTime(q.t) : dmy(q.d)) + (q.live ? " (сейчас)" : q.sale ? " — продажа" : "");
+function clipRange(pts) {                       // дневные точки: обрезать по выбранному масштабу (оставляя минимум две)
+  if (state.range === "y" || state.range === "d") return pts;
+  const c = new Date(); c.setDate(c.getDate() - RANGE_DAYS[state.range]);
+  const cut = c.toISOString().slice(0,10), f = pts.filter(q => q.d >= cut);
+  return f.length >= 2 ? f : pts.slice(-2);
+}
+function xTicks(t0, t1) {                       // подписи оси X под масштаб: часы / дни / месяцы
+  const span = t1 - t0, out = [];
+  if (span <= 2 * DAYMS) {                      // внутри дня — часы (МСК = UTC+3, границы часов совпадают)
+    const step = span <= 4 * 36e5 ? 36e5 : 2 * 36e5;
+    for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) out.push({t, label: mskTime(t)});
+    return out;
+  }
+  if (span <= 70 * DAYMS) {                     // неделя/месяц — дни (точки стоят на полуночи UTC)
+    const stepD = span <= 9 * DAYMS ? 1 : span <= 20 * DAYMS ? 3 : 7;
+    for (let t = t1; t >= t0; t -= stepD * DAYMS) { const d = new Date(t); out.push({t, label: d.getUTCDate() + "." + String(d.getUTCMonth() + 1).padStart(2, "0")}); }
+    return out.reverse();
+  }
+  const d0 = new Date(t0), d1 = new Date(t1);   // длинные периоды — начала месяцев
+  const nMonths = (d1.getFullYear() - d0.getFullYear()) * 12 + d1.getMonth() - d0.getMonth(), every = nMonths > 14 ? 2 : 1;
+  for (let y = d0.getFullYear(), mo = d0.getMonth() + 1; ; mo++) {
+    if (mo > 11) { mo = 0; y++; }
+    const dm = new Date(y, mo, 1); if (dm > d1) break;
+    if (mo % every === 0) out.push({t: dm.getTime(), label: RUM[mo] + (mo === 0 ? " " + String(y).slice(2) : "")});
+  }
+  return out;
+}
+
+// ---------- внутридневные свечи MOEX (масштаб «сегодня») ----------
+let INTRA = null;   // {day, byBond: {secid: [{d, t, close}]}}
+async function candles(secid, from) {
+  const j = await getJSON(`${ISS}/engines/stock/markets/bonds/boards/TQCB/securities/${secid}/candles.json?iss.meta=off&interval=10&from=${from}&candles.columns=begin,close`);
+  return rows(j.candles).filter(r => r.close != null)
+    .map(r => ({d: r.begin.slice(0,10), t: Date.parse(r.begin.replace(" ", "T") + "+03:00"), close: r.close}));
+}
+async function loadIntraday() {
+  const f = new Date(); f.setDate(f.getDate() - 6);            // если сегодня выходной — покажем последний торговый день
+  const from = f.toISOString().slice(0,10);
+  const res = await Promise.all(POSITIONS.map(p => (p.closed && closedDay(p) < from) ? Promise.resolve([])   // закрыта раньше — свечи не нужны
+    : candles(p.secid, from).catch(e => { console.warn("candles", p.secid, e); return []; })));
+  const days = res.flat().map(r => r.d).sort();
+  const day = days.length ? days[days.length-1] : null;
+  const byBond = {}; POSITIONS.forEach((p, i) => byBond[p.secid] = res[i].filter(r => r.d === day));
+  INTRA = {day, byBond};
+}
+// стоимость по свече: живая цена бумаги масштабируется отношением цен (номинал, курс и НКД те же, что в таблице)
+function seriesIntraday(nkd) {
+  if (!INTRA || !INTRA.day || !state.data) return [];
+  const items = {}; for (const it of state.data.items) items[it.p.secid] = it;
+  const cs = {}, idx = {}, cur = {}, times = new Set();
+  // позиции, закрытые до показываемого дня, — постоянная составляющая линии (выручка); закрытая в этот день идёт по рынку до минуты продажи
+  const live = POSITIONS.filter(p => !p.closed || closedDay(p) === INTRA.day);
+  const frozen = POSITIONS.filter(p => p.closed && closedDay(p) !== INTRA.day)
+    .reduce((a, p) => { const x = items[p.secid]; return a + (x ? x.cleanRub + (nkd ? x.nkdRub : 0) : 0); }, 0);
+  for (const p of live) {
+    const it = items[p.secid]; if (!it || !it.price) return [];
+    const arr = INTRA.byBond[p.secid] || []; cs[p.secid] = arr; idx[p.secid] = 0;
+    arr.forEach(c => times.add(c.t));
+    let row = null; for (const r of (HIST && HIST.perBond[p.secid]) || []) { if (r.d < INTRA.day) row = r; else break; }
+    cur[p.secid] = row ? row.close : (arr.length ? arr[0].close : it.price);   // до первой сделки — вчерашнее закрытие
+  }
+  const ts = [...times].sort((a, b) => a - b); if (!ts.length) return [];
+  const pts = [];
+  for (const t of ts) {
+    let v = frozen;
+    for (const p of live) {
+      const lim = p.closed ? closedTs(p) : Infinity, tc = t < lim ? t : lim;
+      const arr = cs[p.secid]; while (idx[p.secid] < arr.length && arr[idx[p.secid]].t <= tc) cur[p.secid] = arr[idx[p.secid]++].close;
+      const it = items[p.secid];
+      v += (t > lim ? it.cleanRub : it.cleanRub * cur[p.secid] / it.price) + (nkd ? it.nkdRub : 0);   // после продажи — ровно выручка
+    }
+    pts.push({d: INTRA.day, t, v});
+  }
+  if (INTRA.day === mskDay(Date.now())) {                       // последняя точка — из живой таблицы
+    const v = state.data.items.reduce((a, x) => a + x.cleanRub + (nkd ? x.nkdRub : 0), 0);
+    pts.push({d: INTRA.day, t: Date.now(), v, live: true});
+  }
   return pts;
 }
+function bondIntraday(p, nkd) {
+  if (!INTRA || !INTRA.day || !state.data) return [];
+  if (p.closed && closedDay(p) !== INTRA.day) return [];      // закрыта раньше — внутри дня показывать нечего
+  const it = state.data.items.find(x => x.p.secid === p.secid); if (!it || !it.price) return [];
+  const fx = it.fxClose || state.data.rates.today, lim = p.closed ? closedTs(p) : Infinity;
+  const pts = (INTRA.byBond[p.secid] || []).filter(c => c.t <= lim)
+    .map(c => ({d: INTRA.day, t: c.t, v: it.cleanRub * c.close / it.price + (nkd ? it.nkdRub : 0), fx}));
+  if (p.closed) { if (pts.length) pts.push({d: INTRA.day, t: lim, v: it.cleanRub + (nkd ? it.nkdRub : 0), fx, sale: true}); return pts; }
+  if (pts.length && INTRA.day === mskDay(Date.now())) pts.push({d: INTRA.day, t: Date.now(), v: it.cleanRub + (nkd ? it.nkdRub : 0), fx, live: true});
+  return pts;
+}
+function syncRange() { document.querySelectorAll("#rangeSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.range === state.range))); }
+async function setRange(r) {
+  if (r === state.range) return;
+  state.range = r; syncRange();
+  try { localStorage.setItem(RANGE_KEY, r); } catch (e) {}
+  if (r === "d" && !INTRA) {
+    $("chart").innerHTML = '<div class="sub">загружаю сделки за сегодня…</div>';
+    try { await loadIntraday(); } catch (e) { $("chart").innerHTML = '<div class="sub">внутридневные данные не загрузились: ' + e.message + '</div>'; return; }
+  }
+  if (HIST) redrawCharts();
+}
+
 function drawChart() {
   if (!HIST || !HIST.dates.length) { $("chart").innerHTML = '<div class="sub">нет истории</div>'; return; }
-  const nkd = state.withNkd; const pts = seriesValue(nkd);
-  if (pts.length < 2) { $("chart").innerHTML = '<div class="sub">мало данных</div>'; return; }
+  const nkd = state.withNkd, day = state.range === "d";
+  const pts = day ? seriesIntraday(nkd) : clipRange(seriesValue(nkd));
+  if (pts.length < 2) { $("chart").innerHTML = '<div class="sub">' + (day ? "сегодня сделок ещё не было" : "мало данных за период") + '</div>'; return; }
   const cost = POSITIONS.every(p => p.cost_rub != null) ? POSITIONS.reduce((a,p) => a + p.cost_rub, 0) : null;
-  // курс ЦБ на те же даты (на дату D действует фиксинг предыдущего торгового дня); сегодня — живой курс
-  const fxPts = pts.map(p => ({d: p.d, v: p.live && state.data ? state.data.rates.today : asOf(HIST.fix, "v", p.d, true)})).filter(p => p.v);
-  const W = 900, H = 260, pl = 52, pr = 118, pt = 14, pb = 26;
-  const t0 = new Date(pts[0].d).getTime(), t1 = new Date(pts[pts.length-1].d).getTime();
-  const vs = pts.map(p => p.v/1e6).concat(cost ? [cost/1e6] : []);
+  // курс ЦБ на те же даты (на дату D действует фиксинг предыдущего торгового дня); сегодня — живой курс. Внутри дня курс не меняется — вторую ось не рисуем
+  const fxPts = day ? [] : pts.map(p => ({d: p.d, t: p.t, v: p.live && state.data ? state.data.rates.today : asOf(HIST.fix, "v", p.d, true)})).filter(p => p.v);
+  const fxVary = fxPts.length > 1 && fxPts.some(p => p.v !== fxPts[0].v);
+  const W = 900, H = 260, pl = 52, pr = fxVary ? 118 : 78, pt = 14, pb = 26;
+  const t0 = pts[0].t, t1 = pts[pts.length-1].t;
+  const vs = pts.map(p => p.v/1e6).concat(cost != null && state.range === "y" ? [cost/1e6] : []);
   let lo = Math.min(...vs), hi = Math.max(...vs); const m = (hi - lo) * 0.08 || 1; lo -= m; hi += m;
   const X = t => pl + (t - t0) / (t1 - t0 || 1) * (W - pl - pr), Y = v => H - pb - (v - lo) / (hi - lo) * (H - pb - pt);
-  let flo = Math.min(...fxPts.map(p => p.v)), fhi = Math.max(...fxPts.map(p => p.v)); const fm = (fhi - flo) * 0.08 || 1; flo -= fm; fhi += fm;
-  const Y2 = v => H - pb - (v - flo) / (fhi - flo) * (H - pb - pt);
+  const showCost = cost != null && cost/1e6 >= lo && cost/1e6 <= hi;
+  let Y2 = null;
+  if (fxVary) {
+    let flo = Math.min(...fxPts.map(p => p.v)), fhi = Math.max(...fxPts.map(p => p.v)); const fm = (fhi - flo) * 0.08 || 1; flo -= fm; fhi += fm;
+    Y2 = v => H - pb - (v - flo) / (fhi - flo) * (H - pb - pt);
+    Y2.lo = flo; Y2.hi = fhi;
+  }
   // тики Y
   const span = hi - lo, raw = span / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))); let step = mag; for (const k of [1,2,2.5,5,10]) { step = k*mag; if (span/step <= 5) break; }
+  let dec = 0; while (dec < 4 && Math.abs(step * Math.pow(10, dec) - Math.round(step * Math.pow(10, dec))) > 1e-9) dec++;   // знаков после запятой — сколько нужно шагу сетки
   let g = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">`;
-  for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W-pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="tick" x="${pl-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${v.toFixed(step<1?1:0)}</text>`;
-  // тики X — начала месяцев
-  const d0 = new Date(pts[0].d), d1 = new Date(pts[pts.length-1].d); const RU = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
-  const nMonths = (d1.getFullYear()-d0.getFullYear())*12 + d1.getMonth()-d0.getMonth(); const every = nMonths > 14 ? 2 : 1;
-  for (let y = d0.getFullYear(), mo = d0.getMonth()+1; ; mo++) { if (mo > 11) { mo = 0; y++; } const dm = new Date(y, mo, 1); if (dm > d1) break; if ((mo % every) === 0) g += `<text class="tick" x="${X(dm.getTime()).toFixed(1)}" y="${H-8}" text-anchor="middle">${RU[mo]}${mo===0?" "+String(y).slice(2):""}</text>`; }
+  for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W-pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="tick" x="${pl-8}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${v.toFixed(dec)}</text>`;
+  // тики X — часы, дни или месяцы, смотря по масштабу
+  for (const tk of xTicks(t0, t1)) g += `<text class="tick" x="${X(tk.t).toFixed(1)}" y="${H-8}" text-anchor="middle">${tk.label}</text>`;
   g += `<line class="axis" x1="${pl}" x2="${W-pr}" y1="${H-pb}" y2="${H-pb}"/>`;
+  // отметки продаж: с этого момента позиция входит в линию выручкой
+  const sales = [...new Set(POSITIONS.filter(q => q.closed).map(q => q.closed))]
+    .map(c => ({t: day ? saleTs(c) : Date.parse(c.slice(0,10)), c}))     // на дневном масштабе точки стоят на дате, а не на минуте
+    .filter(x => x.t >= t0 && x.t <= t1).sort((a, b) => a.t - b.t);
+  sales.forEach((x, i) => {
+    const sx = X(x.t);
+    g += `<line class="sale" x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${pt}" y2="${H-pb}"/>`;
+    if (i === 0 || sx - X(sales[i-1].t) > 40) g += `<text class="salelab" x="${(sx+4).toFixed(1)}" y="${(pt+9)}">продажа</text>`;
+  });
   // правая ось — курс
-  const fspan = fhi - flo, fraw = fspan / 4, fmag = Math.pow(10, Math.floor(Math.log10(fraw))); let fstep = fmag; for (const k of [1,2,2.5,5,10]) { fstep = k*fmag; if (fspan/fstep <= 5) break; }
-  const fLastY = fxPts.length ? Y2(fxPts[fxPts.length-1].v) : -99;
-  for (let v = Math.ceil(flo/fstep)*fstep; v <= fhi + 1e-9; v += fstep) { if (Math.abs(Y2(v) - fLastY) < 13) continue; g += `<text class="tick2" x="${W-pr+8}" y="${(Y2(v)+4).toFixed(1)}">${v.toFixed(fstep<1?1:0)}</text>`; }
-  const fpath = fxPts.map((p,i) => (i?"L":"M") + X(new Date(p.d).getTime()).toFixed(1) + "," + Y2(p.v).toFixed(1)).join(" ");
-  const path = pts.map((p,i) => (i?"L":"M") + X(new Date(p.d).getTime()).toFixed(1) + "," + Y(p.v/1e6).toFixed(1)).join(" ");
-  g += `<path class="area" d="${path} L${X(t1).toFixed(1)},${H-pb} L${X(t0).toFixed(1)},${H-pb} Z"/><path class="line2" d="${fpath}"/><path class="line" d="${path}"/>`;
-  const fl = fxPts[fxPts.length-1]; if (fl) g += `<circle cx="${X(new Date(fl.d).getTime()).toFixed(1)}" cy="${Y2(fl.v).toFixed(1)}" r="3.5" fill="var(--fx)" stroke="var(--surface)" stroke-width="2"/><text class="tick2" x="${(W-pr+8).toFixed(1)}" y="${(Y2(fl.v)+4).toFixed(1)}" style="font-weight:600">${fl.v.toFixed(2)}</text>`;
-  if (cost) { const yc = Y(cost/1e6); g += `<line class="ref" x1="${pl}" x2="${W-pr}" y1="${yc.toFixed(1)}" y2="${yc.toFixed(1)}"/><text class="reflab" x="${W-pr-6}" y="${(yc-5).toFixed(1)}" text-anchor="end">вложено ${(cost/1e6).toFixed(2)}</text>`; }
+  if (fxVary) {
+    const fspan = Y2.hi - Y2.lo, fraw = fspan / 4, fmag = Math.pow(10, Math.floor(Math.log10(fraw))); let fstep = fmag; for (const k of [1,2,2.5,5,10]) { fstep = k*fmag; if (fspan/fstep <= 5) break; }
+    const fLastY = Y2(fxPts[fxPts.length-1].v);
+    for (let v = Math.ceil(Y2.lo/fstep)*fstep; v <= Y2.hi + 1e-9; v += fstep) { if (Math.abs(Y2(v) - fLastY) < 13) continue; g += `<text class="tick2" x="${W-pr+8}" y="${(Y2(v)+4).toFixed(1)}">${v.toFixed(fstep<1?1:0)}</text>`; }
+  }
+  const path = pts.map((p,i) => (i?"L":"M") + X(p.t).toFixed(1) + "," + Y(p.v/1e6).toFixed(1)).join(" ");
+  g += `<path class="area" d="${path} L${X(t1).toFixed(1)},${H-pb} L${X(t0).toFixed(1)},${H-pb} Z"/>`;
+  if (fxVary) {
+    const fpath = fxPts.map((p,i) => (i?"L":"M") + X(p.t).toFixed(1) + "," + Y2(p.v).toFixed(1)).join(" ");
+    g += `<path class="line2" d="${fpath}"/>`;
+  }
+  g += `<path class="line" d="${path}"/>`;
+  if (showCost) { const yc = Y(cost/1e6); g += `<line class="ref" x1="${pl}" x2="${W-pr}" y1="${yc.toFixed(1)}" y2="${yc.toFixed(1)}"/><text class="reflab" x="${W-pr-6}" y="${(yc-5).toFixed(1)}" text-anchor="end">вложено ${(cost/1e6).toFixed(2)}</text>`; }
   const last = pts[pts.length-1]; const lx = X(t1), ly = Y(last.v/1e6);
-  const lastLabelY = cost && Math.abs(ly - Y(cost/1e6)) < 14 ? (ly < Y(cost/1e6) ? ly - 10 : ly + 14) : ly + 4;
+  const lastLabelY = showCost && Math.abs(ly - Y(cost/1e6)) < 14 ? (ly < Y(cost/1e6) ? ly - 10 : ly + 14) : ly + 4;
+  if (fxVary) {   // подпись курса — там же, у правого края: если налезает на подпись стоимости, отодвигаем
+    const fl = fxPts[fxPts.length-1], fy0 = Y2(fl.v);
+    let fy = fy0 + 4; if (Math.abs(fy - lastLabelY) < 12) fy = lastLabelY + (fy0 <= ly ? -12 : 12);
+    g += `<circle cx="${X(fl.t).toFixed(1)}" cy="${fy0.toFixed(1)}" r="3.5" fill="var(--fx)" stroke="var(--surface)" stroke-width="2"/><text class="tick2" x="${(W-pr+8).toFixed(1)}" y="${fy.toFixed(1)}" style="font-weight:600">${fl.v.toFixed(2)}</text>`;
+  }
   g += `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text class="endlab" x="${(lx+8).toFixed(1)}" y="${lastLabelY.toFixed(1)}">${(last.v/1e6).toFixed(2)}</text>`;
   g += `<g id="hov" class="hovg" style="display:none"><line class="axis" id="hovx" y1="${pt}" y2="${H-pb}" style="stroke:var(--ink);opacity:.5"/><circle id="hovc" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></g></svg>`;
   $("chart").innerHTML = g;
+  $("legend").innerHTML = `<span><i style="background:var(--accent)"></i>стоимость портфеля, млн ₽${fxVary ? " (левая ось)" : ""}</span>`
+    + (fxVary ? `<span><i style="background:var(--fx)"></i>курс ЦБ, ₽/$ (правая ось)</span>` : `<span>курс ЦБ внутри дня не меняется — ${state.data ? state.data.rates.today.toFixed(2) : "—"} ₽/$</span>`);
   const mn = pts.reduce((a,p) => p.v < a.v ? p : a), mx = pts.reduce((a,p) => p.v > a.v ? p : a);
-  $("chartSub").textContent = `с ${HIST.start.split("-").reverse().join(".")} (последняя покупка) · ${nkd ? "с НКД" : "без НКД"} · мин ${(mn.v/1e6).toFixed(2)} (${mn.d.slice(5).split("-").reverse().join(".")}) · макс ${(mx.v/1e6).toFixed(2)} (${mx.d.slice(5).split("-").reverse().join(".")})`;
+  const per = day ? `${dmy(INTRA.day)} внутри дня · свечи 10 мин`
+            : state.range === "y" ? `с ${dmy(HIST.start)} (последняя покупка)`
+            : `${RANGE_LBL[state.range]} — с ${dmy(pts[0].d)}`;
+  const nCl = POSITIONS.filter(q => q.closed).length;
+  $("chartSub").textContent = `${per} · ${nkd ? "с НКД" : "без НКД"} · мин ${(mn.v/1e6).toFixed(2)} (${ptLabel(mn)}) · макс ${(mx.v/1e6).toFixed(2)} (${ptLabel(mx)})`
+    + (nCl ? ` · ${nCl} закрытых после продажи учтены выручкой` : "");
   // hover
   const svg = $("chart").querySelector("svg"), tip = $("tip");
   const hideTip = () => { const h = svg.querySelector("#hov"); if (h) h.style.display = "none"; tip.style.display = "none"; };
   svg.style.touchAction = "pan-y";           // вертикальная прокрутка страницы пальцем по графику работает как обычно
   const showAt = e => {
     const r = svg.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width * W; const t = t0 + (px - pl) / (W - pl - pr) * (t1 - t0);
-    let best = pts[0], bd = Infinity; for (const p of pts) { const dd = Math.abs(new Date(p.d).getTime() - t); if (dd < bd) { bd = dd; best = p; } }
-    const cx = X(new Date(best.d).getTime()), cy = Y(best.v/1e6);
+    let best = pts[0], bd = Infinity; for (const p of pts) { const dd = Math.abs(p.t - t); if (dd < bd) { bd = dd; best = p; } }
+    const cx = X(best.t), cy = Y(best.v/1e6);
     const hov = svg.querySelector("#hov"); hov.style.display = ""; svg.querySelector("#hovx").setAttribute("x1", cx); svg.querySelector("#hovx").setAttribute("x2", cx);
     svg.querySelector("#hovc").setAttribute("cx", cx); svg.querySelector("#hovc").setAttribute("cy", cy);
-    const bf = fxPts.find(p => p.d === best.d);
-    tip.innerHTML = `<div style="color:var(--muted)">${best.d.split("-").reverse().join(".")}${best.live ? " (сейчас)" : ""}</div><b>${(best.v/1e6).toFixed(2)} млн ₽</b>` + (cost ? `<div>${sgn(best.v - cost)} к вложениям</div>` : "") + (bf ? `<div style="color:var(--fx)">курс ЦБ ${bf.v.toFixed(4)}</div>` : "");
+    const bf = fxVary ? fxPts.find(p => p.t === best.t) : null;
+    tip.innerHTML = `<div style="color:var(--muted)">${ptLabel(best)}</div><b>${(best.v/1e6).toFixed(2)} млн ₽</b>` + (cost ? `<div>${sgn(best.v - cost)} к вложениям</div>` : "") + (bf ? `<div style="color:var(--fx)">курс ЦБ ${bf.v.toFixed(4)}</div>` : "");
     tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + "px"; tip.style.top = Math.max(8, e.clientY - 70) + "px";
   };
   svg.addEventListener("pointermove", showAt);
@@ -503,54 +731,73 @@ function drawChart() {
 const RUM = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 let BONDBIND = [];
 function bondCardHTML(p) {
-  const h = (HIST.perBond[p.secid] || []); const nkd = state.withNkd;
+  const h = (HIST.perBond[p.secid] || []); const nkd = state.withNkd, day = state.range === "d";
   const it = state.data ? state.data.items.find(x => x.p.secid === p.secid) : null;
-  const pts = [];
-  for (const r of h) { const fx = asOf(HIST.fix, "v", r.d, true); if (!fx) continue; pts.push({d: r.d, v: p.qty * (r.face * r.close / 100 * fx + (nkd ? r.acc : 0)), fx}); }
-  if (it) { const today = new Date().toISOString().slice(0,10); const v = it.cleanRub + (nkd ? it.nkdRub : 0); const fx = state.data.rates.today;
-    if (pts.length && pts[pts.length-1].d === today) { pts[pts.length-1].v = v; pts[pts.length-1].fx = fx; }
-    else pts.push({d: today, v, fx, live: true}); }
-  if (pts.length < 2) return "";
+  const cl = !!p.closed;
+  let pts;
+  if (day) pts = bondIntraday(p, nkd);                 // у закрытой в этот день — линия до минуты продажи, у закрытой раньше — пусто
+  else {
+    pts = [];
+    for (const r of h) { if (cl && r.d >= closedDay(p)) break;      // после продажи истории по позиции нет
+      const fx = asOf(HIST.fix, "v", r.d, true); if (!fx) continue; pts.push({d: r.d, t: Date.parse(r.d), v: p.qty * (r.face * r.close / 100 * fx + (nkd ? r.acc : 0)), fx}); }
+    if (cl && it) {   // последняя точка — момент продажи, значение = выручка (как в таблице)
+      pts.push({d: closedDay(p), t: closedTs(p), v: it.cleanRub + (nkd ? it.nkdRub : 0), fx: it.fxClose || state.data.rates.today, sale: true});
+    } else if (it) { const today = new Date().toISOString().slice(0,10); const v = it.cleanRub + (nkd ? it.nkdRub : 0); const fx = state.data.rates.today;
+      if (pts.length && pts[pts.length-1].d === today) { pts[pts.length-1].v = v; pts[pts.length-1].fx = fx; }
+      else pts.push({d: today, t: Date.parse(today), v, fx, live: true}); }
+    pts = clipRange(pts);
+  }
+  const id = "bc_" + p.secid;
+  if (pts.length < 2) return `<div class="chart-card${cl ? " closed" : ""}" id="${id}"><div class="t">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}</div><div class="s">${cl ? "позиция закрыта " + closedLbl(p) : (day ? "сегодня сделок по бумаге не было" : "мало данных за выбранный период")}</div></div>`;
   const cost = p.cost_rub;
-  const W = 460, H = 185, pl = 48, pr = 56, ptp = 12, pb = 22;
-  const t0 = new Date(pts[0].d).getTime(), t1 = new Date(pts[pts.length-1].d).getTime();
-  const vs = pts.map(q => q.v/1e6).concat(cost ? [cost/1e6] : []);
+  const fxVary = pts.some(q => q.fx !== pts[0].fx);
+  const W = 460, H = 185, pl = 48, pr = fxVary ? 56 : 44, ptp = 12, pb = 22;
+  const t0 = pts[0].t, t1 = pts[pts.length-1].t;
+  const vs = pts.map(q => q.v/1e6).concat(cost != null && state.range === "y" ? [cost/1e6] : []);
   let lo = Math.min(...vs), hi = Math.max(...vs); const mg = (hi - lo) * 0.08 || .5; lo -= mg; hi += mg;
   const X = t => pl + (t - t0) / (t1 - t0 || 1) * (W - pl - pr), Y = v => H - pb - (v - lo) / (hi - lo) * (H - pb - ptp);
-  let flo = Math.min(...pts.map(q => q.fx)), fhi = Math.max(...pts.map(q => q.fx)); const fmg = (fhi - flo) * 0.08 || .5; flo -= fmg; fhi += fmg;
-  const Y2 = v => H - pb - (v - flo) / (fhi - flo) * (H - pb - ptp);
+  const showCost = cost != null && cost/1e6 >= lo && cost/1e6 <= hi;
+  let Y2 = null;
+  if (fxVary) {
+    let flo = Math.min(...pts.map(q => q.fx)), fhi = Math.max(...pts.map(q => q.fx)); const fmg = (fhi - flo) * 0.08 || .5; flo -= fmg; fhi += fmg;
+    Y2 = v => H - pb - (v - flo) / (fhi - flo) * (H - pb - ptp);
+  }
   const span = hi - lo, raw = span / 3, mag = Math.pow(10, Math.floor(Math.log10(raw))); let step = mag; for (const k of [1,2,2.5,5,10]) { step = k * mag; if (span / step <= 4) break; }
+  let dec = 0; while (dec < 4 && Math.abs(step * Math.pow(10, dec) - Math.round(step * Math.pow(10, dec))) > 1e-9) dec++;   // знаков после запятой — сколько нужно шагу сетки
   let g = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">`;
-  for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W-pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="tick" x="${pl-6}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${v.toFixed(step < 1 ? 1 : 0)}</text>`;
-  const d0 = new Date(pts[0].d), d1 = new Date(pts[pts.length-1].d);
-  for (let y = d0.getFullYear(), mo = d0.getMonth() + 1; ; mo++) { if (mo > 11) { mo = 0; y++; } const dm = new Date(y, mo, 1); if (dm > d1) break; if (mo % 2 === 0) g += `<text class="tick" x="${X(dm.getTime()).toFixed(1)}" y="${H-6}" text-anchor="middle">${RUM[mo]}${mo === 0 ? " " + String(y).slice(2) : ""}</text>`; }
+  for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W-pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="tick" x="${pl-6}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${v.toFixed(dec)}</text>`;
+  for (const tk of xTicks(t0, t1)) g += `<text class="tick" x="${X(tk.t).toFixed(1)}" y="${H-6}" text-anchor="middle">${tk.label}</text>`;
   g += `<line class="axis" x1="${pl}" x2="${W-pr}" y1="${H-pb}" y2="${H-pb}"/>`;
-  const path = pts.map((q,i) => (i?"L":"M") + X(new Date(q.d).getTime()).toFixed(1) + "," + Y(q.v/1e6).toFixed(1)).join(" ");
-  const fpath = pts.map((q,i) => (i?"L":"M") + X(new Date(q.d).getTime()).toFixed(1) + "," + Y2(q.fx).toFixed(1)).join(" ");
-  g += `<path class="area" d="${path} L${X(t1).toFixed(1)},${H-pb} L${X(t0).toFixed(1)},${H-pb} Z"/><path class="line2" d="${fpath}"/><path class="line" d="${path}"/>`;
-  if (cost) { const yc = Y(cost/1e6); g += `<line class="ref" x1="${pl}" x2="${W-pr}" y1="${yc.toFixed(1)}" y2="${yc.toFixed(1)}"/>`; }
+  const path = pts.map((q,i) => (i?"L":"M") + X(q.t).toFixed(1) + "," + Y(q.v/1e6).toFixed(1)).join(" ");
+  g += `<path class="area" d="${path} L${X(t1).toFixed(1)},${H-pb} L${X(t0).toFixed(1)},${H-pb} Z"/>`;
+  if (fxVary) g += `<path class="line2" d="${pts.map((q,i) => (i?"L":"M") + X(q.t).toFixed(1) + "," + Y2(q.fx).toFixed(1)).join(" ")}"/>`;
+  g += `<path class="line" d="${path}"/>`;
+  if (showCost) { const yc = Y(cost/1e6); g += `<line class="ref" x1="${pl}" x2="${W-pr}" y1="${yc.toFixed(1)}" y2="${yc.toFixed(1)}"/>`; }
   const lastq = pts[pts.length-1];
+  if (lastq.sale) { const sx = X(lastq.t); g += `<line class="sale" x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${ptp}" y2="${H-pb}"/><text class="salelab" x="${(sx-4).toFixed(1)}" y="${ptp+9}" text-anchor="end">продажа</text>`; }
   g += `<circle cx="${X(t1).toFixed(1)}" cy="${Y(lastq.v/1e6).toFixed(1)}" r="3.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text class="endlab" x="${(X(t1)+6).toFixed(1)}" y="${(Y(lastq.v/1e6)+4).toFixed(1)}">${(lastq.v/1e6).toFixed(2)}</text>`;
-  g += `<text class="tick2" x="${(W-pr+6).toFixed(1)}" y="${(Y2(lastq.fx)+4).toFixed(1)}">${lastq.fx.toFixed(1)}</text>`;
+  if (fxVary) g += `<text class="tick2" x="${(W-pr+6).toFixed(1)}" y="${(Y2(lastq.fx)+4).toFixed(1)}">${lastq.fx.toFixed(1)}</text>`;
   g += `<g class="hovg" style="display:none"><line class="bx" y1="${ptp}" y2="${H-pb}" style="stroke:var(--ink);opacity:.5;stroke-width:1"/><circle class="bc" r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></g></svg>`;
-  const id = "bc_" + p.secid;
-  BONDBIND.push({id, pts, cost, W, H, pl, pr, ptp, pb, t0, t1, lo, hi});
+  BONDBIND.push({id, pts, cost, W, H, pl, pr, ptp, pb, t0, t1, lo, hi, fxVary});
   const sec = it ? it.s : {}, mrow = it ? it.m : {}, coup = it ? it.coup : {rub: null};
   const nowV = it ? it.cleanRub + (nkd ? it.nkdRub : 0) : null;
   const dR = (nowV != null && cost != null) ? nowV - cost : null;
   const bought = (p.lots || []).map(l => l.date.split("-").reverse().join(".")).join(", ");
   const buyTxt = (it && it.buyPct != null) ? ` по ${it.buyPct.toFixed(2)}%` : "";
   const above = it && it.buyPct != null && it.buyPct > 100;
-  const sub = `${p.qty} шт · куплено ${bought}${buyTxt} · до ${sec.MATDATE ? sec.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${mrow.YIELD ?? "—"}% · млн ₽ (левая ось), курс ЦБ (правая)`;
+  const scale = cl ? "до продажи" : day ? `${dmy(INTRA.day)} внутри дня` : RANGE_LBL[state.range];
+  const held = cl && p.lots && p.lots.length ? Math.round((closedTs(p) - Date.parse(p.lots.map(l => l.date).sort()[0])) / 864e5) : null;
+  const sub = `${p.qty} шт · куплено ${bought}${buyTxt} · ${cl ? `продана ${closedLbl(p)}${held != null ? ` · в портфеле ${held} дн.` : ""}`
+    : `до ${sec.MATDATE ? sec.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${mrow.YIELD ?? "—"}%`} · ${scale}, млн ₽${fxVary ? " (левая ось), курс ЦБ (правая)" : ""}`;
   const line2 = (cost != null && nowV != null)
-    ? `вложено ${fmt(cost)} → ${fmt(nowV)} (<span class="${dR >= 0 ? "cpos" : "cneg"}">${sgn(dR)}</span>${nkd ? "" : ", без НКД"}) · купоны ${coup.rub != null ? fmt(coup.rub) : "—"}` : "";
-  return `<div class="chart-card${above ? " above" : ""}" id="${id}"><div class="t">${short(p.name)}</div><div class="s">${sub}</div><div class="s">${line2}</div>${g}</div>`;
+    ? `вложено ${fmt(cost)} ${cl ? "→ продана за" : "→"} ${fmt(nowV)} (<span class="${dR >= 0 ? "cpos" : "cneg"}">${sgn(dR)}</span>${nkd ? "" : ", без НКД"}) · купоны ${coup.rub != null ? fmt(coup.rub) : "—"}${cl && coup.rub != null && dR != null ? ` · итог ${sgn(dR + coup.rub)}` : ""}` : "";
+  return `<div class="chart-card${cl ? " closed" : above ? " above" : ""}" id="${id}"><div class="t">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}</div><div class="s">${sub}</div><div class="s">${line2}</div>${g}</div>`;
 }
 function drawBondCharts() {
   const cont = $("bonds"); if (!cont || !HIST) return;
   BONDBIND = [];
   const key = a => { const A = state.data ? state.data.items.find(x => x.p.secid === a.secid) : null; return ((A && A.s.MATDATE) || "9999") + a.secid; };
-  const order = [...POSITIONS].sort((a, b) => key(a).localeCompare(key(b)));
+  const order = [...POSITIONS].sort((a, b) => (a.closed ? 1 : 0) - (b.closed ? 1 : 0) || key(a).localeCompare(key(b)));   // закрытые — в конец
   cont.innerHTML = order.map(bondCardHTML).join("") || '<div class="sub">нет данных</div>';
   for (const b of BONDBIND) { const el = document.getElementById(b.id); if (el) bindBondHover(el.querySelector("svg"), b); }
 }
@@ -561,19 +808,20 @@ function bindBondHover(svg, b) {
   const hide = () => { const h = svg.querySelector(".hovg"); if (h) h.style.display = "none"; tip.style.display = "none"; };
   const show = e => {
     const r = svg.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width * b.W; const t = b.t0 + (px - b.pl) / (b.W - b.pl - b.pr) * (b.t1 - b.t0);
-    let best = b.pts[0], bd = Infinity; for (const q of b.pts) { const dd = Math.abs(new Date(q.d).getTime() - t); if (dd < bd) { bd = dd; best = q; } }
-    const cx = X(new Date(best.d).getTime()), cy = Y(best.v/1e6);
+    let best = b.pts[0], bd = Infinity; for (const q of b.pts) { const dd = Math.abs(q.t - t); if (dd < bd) { bd = dd; best = q; } }
+    const cx = X(best.t), cy = Y(best.v/1e6);
     const h = svg.querySelector(".hovg"); h.style.display = "";
     const bx = svg.querySelector(".bx"); bx.setAttribute("x1", cx); bx.setAttribute("x2", cx);
     const bc = svg.querySelector(".bc"); bc.setAttribute("cx", cx); bc.setAttribute("cy", cy);
-    tip.innerHTML = `<div style="color:var(--muted)">${best.d.split("-").reverse().join(".")}${best.live ? " (сейчас)" : ""}</div><b>${fmt(best.v)} ₽</b>` + (b.cost ? `<div>${sgn(best.v - b.cost)} к вложениям</div>` : "") + `<div style="color:var(--fx)">курс ЦБ ${best.fx.toFixed(4)}</div>`;
+    tip.innerHTML = `<div style="color:var(--muted)">${ptLabel(best)}</div><b>${fmt(best.v)} ₽</b>` + (b.cost ? `<div>${sgn(best.v - b.cost)} к вложениям</div>` : "") + (b.fxVary ? `<div style="color:var(--fx)">курс ЦБ ${best.fx.toFixed(4)}</div>` : "");
     tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + "px"; tip.style.top = Math.max(8, e.clientY - 80) + "px";
   };
   svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show);
   svg.addEventListener("pointerleave", hide); svg.addEventListener("pointercancel", hide);
   svg.addEventListener("pointerup", e => { if (e.pointerType !== "mouse") hide(); });
 }
-
+document.querySelectorAll("#rangeSeg button").forEach(b => b.onclick = () => setRange(b.dataset.range));
+syncRange();
 $("modeStart").onclick = () => { state.mode = "start"; render(); };
 $("modeYday").onclick  = () => { state.mode = "yday"; render(); };
 $("withNkd").onchange = e => { state.withNkd = e.target.checked; render(); if (HIST) { drawChart(); drawBondCharts(); } };
