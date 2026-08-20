@@ -169,7 +169,7 @@ svg .area { fill: var(--accent); opacity:.10; }
   <p class="sub" style="max-width:80ch;margin-top:10px">Что было бы, если бы позиции не продавали. «Стоила бы сейчас» — те же бумаги по текущей котировке MOEX, с НКД, по сегодняшнему курсу ЦБ;
   «купоны после продажи» — выплаты, прошедшие уже после даты продажи. «Δ если бы держал» = стоила&nbsp;бы + купоны − выручка:
   <span class="cneg">красное</span> — столько упущено, <span class="cpos">зелёное</span> — столько сэкономлено на продаже.
-  «Выкуп на выручку» — сколько бумаг берётся сегодня на ту же выручку (по цене с НКД, без учёта комиссии и налога с прибыли):
+  «Выкуп на выручку» — сколько бумаг берётся сегодня на ту же выручку и почём (котировка и рублёвая цена одной бумаги с НКД, без учёта комиссии и налога с прибыли):
   больше проданного количества — значит откупить сейчас дешевле, чем продали. Всё считается с НКД независимо от галки «НКД».</p>
 </div>
 
@@ -502,10 +502,10 @@ function renderWhatIf() {
       <td class="name">${short(p.name)}<div class="s">${fmt(p.qty)} шт · продана ${closedLbl(p)}</div></td>
       <td class="num">${it.price.toFixed(2)} → ${mk.price.toFixed(2)}%<div class="s">${sgn(mk.price - it.price, 2)} п.п.${it.quasi ? ` · курс ${fxC.toFixed(2)} → ${fx.toFixed(2)}` : ""}</div></td>
       <td class="num">${fmt(sale)}<div class="s">${fmt(sale / fxC)} $</div></td>
-      <td class="num">${fmt(now)}<div class="s">${fmt(now / fx)} $ · ${fmt(unit)} за шт</div></td>
+      <td class="num">${fmt(now)}<div class="s">${fmt(now / fx)} $</div></td>
       <td class="num ${post > 0 ? "pos" : "flat"}">${post ? fmt(post) : "—"}<div class="s">${post ? fmt(it.coup.postUsd) + " $ · " + it.coup.postN + " выпл." : "выплат не было"}</div></td>
       <td class="num delta ${dR > 0 ? "neg" : dR < 0 ? "pos" : "flat"}">${sgn(dR)}<div class="s">${pct(dP)} · ${dR > 0 ? "упущено" : dR < 0 ? "сэкономлено" : "как продали"}</div></td>
-      <td class="num ${dQty > 0 ? "pos" : dQty < 0 ? "neg" : "flat"}">${buy != null ? fmt(buy) + " шт" : "—"}<div class="s">${dQty != null ? sgn(dQty) + " шт к проданным " + fmt(p.qty) : ""}</div></td>
+      <td class="num ${dQty > 0 ? "pos" : dQty < 0 ? "neg" : "flat"}">${buy != null ? fmt(buy) + " шт" : "—"}<div class="s">по ${mk.price.toFixed(2)}% · ${fmt(unit)} ₽/шт${dQty != null ? " · " + sgn(dQty) + " шт к проданным " + fmt(p.qty) : ""}</div></td>
     </tr>`;
   }).join("");
   const dT = T.now + T.post - T.sale, dTP = T.sale ? dT / T.sale * 100 : null;
@@ -515,7 +515,7 @@ function renderWhatIf() {
     <td class="num">${fmt(T.now)}<div class="s">${fmt(T.now / fx)} $</div></td>
     <td class="num ${T.post > 0 ? "pos" : "flat"}">${T.post ? fmt(T.post) : "—"}</td>
     <td class="num delta ${dT > 0 ? "neg" : dT < 0 ? "pos" : "flat"}">${sgn(dT)}<div class="s">${pct(dTP)}</div></td>
-    <td class="num ${vol > 100 ? "pos" : vol < 100 ? "neg" : "flat"}">${vol != null ? vol.toFixed(1) + "%" : "—"}<div class="s">прежнего объёма</div></td></tr>`;
+    <td class="num ${vol > 100 ? "pos" : vol < 100 ? "neg" : "flat"}">${vol != null ? vol.toFixed(1) + "%" : "—"}<div class="s">прежнего объёма на ${fmt(T.sale)} ₽</div></td></tr>`;
   $("wiSum").textContent = `Продано ${cl.length} поз. за ${fmt(T.sale / 1e6, 2)} млн ₽ · сегодня те же бумаги стоили бы ${fmt(T.now / 1e6, 2)} млн`
     + (T.post ? ` + ${fmt(T.post / 1e6, 2)} млн купонов` : "")
     + ` → ${dT > 0 ? "упущено" : "сэкономлено"} ${fmt(Math.abs(dT) / 1e6, 2)} млн (${dTP != null ? Math.abs(dTP).toFixed(2) : "—"}%)`
@@ -920,7 +920,7 @@ function bondCardHTML(p) {
     const sale = it.cleanRub + it.nkdRub, now = it.mkt.cleanRub + it.mkt.nkdRub, post = it.coup.postRub || 0, diff = now + post - sale;
     const buy = now > 0 ? Math.floor(sale / (now / p.qty)) : null;
     line3 = `если бы не продал: сейчас ${fmt(now)}${post ? ` + ${fmt(post)} купонов` : ""} → <span class="${diff > 0 ? "cneg" : "cpos"}">${sgn(diff)}</span>`
-          + (buy != null ? ` · на выручку берётся ${fmt(buy)} шт (${sgn(buy - p.qty)})` : "");
+          + (buy != null ? ` · выкуп ${fmt(buy)} шт (${sgn(buy - p.qty)}) по ${fmt(now / p.qty)} ₽/шт` : "");
   }
   return `<div class="chart-card${cl ? " closed" : above ? " above" : ""}" id="${id}"><div class="t">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}</div><div class="s">${sub}</div><div class="s">${line2}</div>${line3 ? `<div class="s">${line3}</div>` : ""}${g}</div>`;
 }
