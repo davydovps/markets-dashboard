@@ -8,16 +8,19 @@
 :root {
   --warn-bg:#fdf6d8; --warn-line:#e3c34a; --bg:#f5f6f4; --surface:#fcfcfb; --ink:#141816; --ink2:#525955; --muted:#878c88; --grid:#e2e4df; --axis:#c4c7c1;
   --accent:#1f6f66; --accent-ink:#155a53; --border:rgba(20,24,22,.10);
-  --pos:#0a6b0a; --pos-bg:rgba(10,131,10,.10); --neg:#b3261e; --neg-bg:rgba(211,59,59,.10); --fx:#c9560f; color-scheme: light;
+  --pos:#0a6b0a; --pos-bg:rgba(10,131,10,.10); --neg:#b3261e; --neg-bg:rgba(211,59,59,.10); --fx:#c9560f;
+  --closed-bg:rgba(20,24,22,.05); color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --warn-bg:#2e2a14; --warn-line:#a88b1e; --bg:#0f1110; --surface:#1a1c1a; --ink:#f3f4f1; --ink2:#c1c5bf; --muted:#8a8f8a; --grid:#2c2f2c; --axis:#3a3e3a;
   --accent:#4fb3a6; --accent-ink:#7fd0c5; --border:rgba(255,255,255,.10);
-  --pos:#4fd24f; --pos-bg:rgba(79,210,79,.12); --neg:#ff8a80; --neg-bg:rgba(255,138,128,.12); --fx:#f0955a; color-scheme: dark; } }
+  --pos:#4fd24f; --pos-bg:rgba(79,210,79,.12); --neg:#ff8a80; --neg-bg:rgba(255,138,128,.12); --fx:#f0955a;
+  --closed-bg:rgba(255,255,255,.05); color-scheme: dark; } }
 :root[data-theme="dark"] {
   --warn-bg:#2e2a14; --warn-line:#a88b1e; --bg:#0f1110; --surface:#1a1c1a; --ink:#f3f4f1; --ink2:#c1c5bf; --muted:#8a8f8a; --grid:#2c2f2c; --axis:#3a3e3a;
   --accent:#4fb3a6; --accent-ink:#7fd0c5; --border:rgba(255,255,255,.10);
-  --pos:#4fd24f; --pos-bg:rgba(79,210,79,.12); --neg:#ff8a80; --neg-bg:rgba(255,138,128,.12); --fx:#f0955a; color-scheme: dark; }
+  --pos:#4fd24f; --pos-bg:rgba(79,210,79,.12); --neg:#ff8a80; --neg-bg:rgba(255,138,128,.12); --fx:#f0955a;
+  --closed-bg:rgba(255,255,255,.05); color-scheme: dark; }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--bg); color:var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 .wrap { max-width: 1400px; margin: 0 auto; padding: 24px 16px 60px; }
@@ -48,7 +51,10 @@ th { font-weight:600; color: var(--ink2); font-size:.78rem; position: sticky; to
 th.num, td.num { text-align:right; font-variant-numeric: tabular-nums; }
 td .s { color: var(--muted); font-size:.76rem; }
 tr.above td { background: var(--warn-bg); }
-tr.closed td.name { color: var(--ink2); }
+tr.closed td { background: var(--closed-bg); color: var(--ink2); }
+tr.closed td.name, tr.closed td .s { color: var(--muted); }
+tr.closed td.pos { color: var(--pos); background: var(--closed-bg); opacity:.72; }   /* зафиксированный результат: знак виден, но приглушён */
+tr.closed td.neg { color: var(--neg); background: var(--closed-bg); opacity:.72; }
 tr.sep td { border-top: 1px dashed var(--axis); }
 .badge { display:inline-block; font-size:.68rem; line-height:1.4; padding:0 5px; border-radius:3px; border:1px solid var(--border); background:var(--bg); color:var(--muted); margin-left:5px; vertical-align:middle; white-space:nowrap; }
 .chart-card.above { background: var(--warn-bg); border-color: var(--warn-line); }
@@ -74,6 +80,8 @@ svg .sale { stroke: var(--muted); stroke-width:1; stroke-dasharray: 3 3; opacity
 svg .salelab { font-size: 10px; fill: var(--muted); }
 svg .line { fill:none; stroke: var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
 svg .line2 { fill:none; stroke: var(--fx); stroke-width:1.5; stroke-linejoin:round; stroke-linecap:round; }
+svg .ghost { fill:none; stroke: var(--muted); stroke-width:1.6; stroke-dasharray: 5 4; stroke-linejoin:round; stroke-linecap:round; }
+svg .ghostlab { font-size: 11px; fill: var(--muted); font-weight:600; font-variant-numeric: tabular-nums; }
 svg .tick2 { font-size: 11px; fill: var(--fx); font-variant-numeric: tabular-nums; }
 .legend { display:flex; gap:16px; font-size:.8rem; color:var(--ink2); margin: 2px 0 4px; }
 .legend i { display:inline-block; width:14px; height:3px; border-radius:2px; vertical-align:middle; margin-right:6px; }
@@ -147,6 +155,24 @@ svg .area { fill: var(--accent); opacity:.10; }
 <tbody id="rows"><tr><td colspan="8" class="sub">Загружаю котировки MOEX и курс ЦБ…</td></tr></tbody>
 </table></div>
 <div class="status" id="status"></div>
+
+<div id="whatif" style="display:none">
+  <div class="sect">Если бы не продал<span class="badge">всегда с НКД</span></div>
+  <div class="sub" id="wiSum" style="margin-bottom:8px"></div>
+  <div class="tw"><table>
+  <thead><tr>
+    <th>Бумага</th><th class="num">Цена: продажа → сейчас</th><th class="num">Выручка</th>
+    <th class="num">Стоила бы сейчас</th><th class="num" style="white-space:normal">Купоны после&nbsp;продажи</th>
+    <th class="num">Δ если бы держал</th><th class="num" style="white-space:normal">Выкуп на&nbsp;выручку</th>
+  </tr></thead>
+  <tbody id="wiRows"></tbody></table></div>
+  <p class="sub" style="max-width:80ch;margin-top:10px">Что было бы, если бы позиции не продавали. «Стоила бы сейчас» — те же бумаги по текущей котировке MOEX, с НКД, по сегодняшнему курсу ЦБ;
+  «купоны после продажи» — выплаты, прошедшие уже после даты продажи. «Δ если бы держал» = стоила&nbsp;бы + купоны − выручка:
+  <span class="cneg">красное</span> — столько упущено, <span class="cpos">зелёное</span> — столько сэкономлено на продаже.
+  «Выкуп на выручку» — сколько бумаг берётся сегодня на ту же выручку (по цене с НКД, без учёта комиссии и налога с прибыли):
+  больше проданного количества — значит откупить сейчас дешевле, чем продали. Всё считается с НКД независимо от галки «НКД».</p>
+</div>
+
 <div class="sect">По бумагам</div>
 <div id="bonds" class="bond-grid"><div class="sub">графики появятся после загрузки истории…</div></div>
 <p class="sub" style="max-width:80ch;margin-top:14px">Стоимость — по официальному курсу ЦБ, с НКД или без (галка «НКД» переключает колонки «Сейчас» и Δ);
@@ -164,7 +190,10 @@ svg .area { fill: var(--accent); opacity:.10; }
 (10-минутная свеча MOEX за эту минуту, если её нет — закрытие того дня), НКД и номинал — за ту же дату, курс — ЦБ на день продажи.
 «Сейчас» по такой строке — выручка от продажи, Δ — зафиксированный результат, «Δ ко вчера» по ней всегда пусто, купоны — только до дня продажи,
 будущих купонов и купона в месяц нет. На графике портфеля с момента продажи (пунктирная отметка) позиция входит выручкой, а не котировкой —
-поэтому линия не проваливается; на карточке бумаги линия обрывается в момент продажи.</p>
+поэтому линия не проваливается; на карточке бумаги линия обрывается в момент продажи.
+Что было бы, если бы их не продали, показывает раздел «Если бы не продал» и серый пунктир на графиках: после момента продажи он ведёт позицию
+дальше по рынку. На карточке проданной бумаги горизонтальный пунктир — уровень выручки: пунктир ниже него значит, что бумага сейчас дешевле,
+чем её продали.</p>
 </div>
 
 <script>
@@ -238,17 +267,23 @@ async function cbrOn(dateISO) {
 async function couponsReceived(p, cbrRates) {
   // купоны по лотам: с даты покупки лота по сегодня; value_rub из ISS (по курсу ЦБ на дату выплаты) либо value*курс
   const j = await getJSON(`${ISS}/securities/${p.secid}/bondization.json?iss.meta=off&iss.only=coupons&coupons.columns=coupondate,value,value_rub&limit=300`);
-  const until = closedDay(p) || new Date().toISOString().slice(0,10);   // по закрытой позиции купоны идут только до дня продажи
+  const today = new Date().toISOString().slice(0,10);
+  const until = closedDay(p) || today;   // по закрытой позиции купоны идут только до дня продажи
   let rub=0, usd=0; const dates = new Set();
   let futUsd = 0, futN = 0, futLast = null;   // будущие купоны до погашения (на всю позицию), $ на бумагу × шт
+  let postRub = 0, postUsd = 0, postN = 0;    // «если бы не продал»: выплаты после продажи по сегодня — их бы получили
   for (const c of rows(j.coupons)) {
     if (!c.coupondate || c.value==null) continue;
-    if (c.coupondate > until) { if (!p.closed) { futUsd += c.value * p.qty; futN++; futLast = c.coupondate; } continue; }
+    if (c.coupondate > until) {
+      if (!p.closed) { futUsd += c.value * p.qty; futN++; futLast = c.coupondate; }
+      else if (c.coupondate <= today) { postUsd += c.value * p.qty; postRub += (c.value_rub ?? c.value * cbrRates.today) * p.qty; postN++; }
+      continue;
+    }
     for (const lot of (p.lots || [])) {
       if (c.coupondate > lot.date) { usd += c.value * lot.qty; rub += (c.value_rub ?? c.value * cbrRates.today) * lot.qty; dates.add(c.coupondate); }
     }
   }
-  return {rub, usd, n: dates.size, futUsd, futN, futLast};
+  return {rub, usd, n: dates.size, futUsd, futN, futLast, postRub, postUsd, postN};
 }
 
 async function closeSnap(p, s) {
@@ -340,6 +375,7 @@ async function load() {
       const cpMonthUsd = quasi ? face * (s.COUPONPERCENT||0)/100/12 * p.qty : null;
       const cpMonthRub = quasi ? cpMonthUsd * fx : face*(s.COUPONPERCENT||0)/100/12*p.qty;
       const it = {p, s, m, price, src, cleanRub, cleanRubY, nkdRub, nkdRubY, costUsd, buyPct, cpMonthUsd, cpMonthRub, coup: coup[i], quasi};
+      it.mkt = {price, src, cleanRub, nkdRub, cpMonthRub, cpMonthUsd};   // рынок сейчас: по закрытой позиции — это «если бы не продал»
       if (p.closed) {                      // позиция закрыта — всё замораживаем на момент продажи
         const snap = snaps[i] || {}, fxC = fxBought[closedDay(p)] || fx, fc = snap.face || face;
         it.fxClose = fxC; it.closeSrc = snap.src || null;
@@ -439,7 +475,51 @@ function render() {
   $("tFx").textContent = rates.today.toFixed(4);
   $("tFxSub").textContent = `на ${rates.date.split("-").reverse().join(".")} · пред. ${rates.prev.toFixed(4)} (${sgn(rates.today-rates.prev, 4)})`;
   renderFx();
+  renderWhatIf();
   $("asof").textContent = `MOEX ${d.sysTime || ""} · курс ЦБ на ${rates.date.split("-").reverse().join(".")} · обновлено ${new Date().toLocaleTimeString("ru-RU")}`;
+}
+
+// ---------- «если бы не продал»: почём закрытые позиции сегодня и по чём их откупать ----------
+function renderWhatIf() {
+  const d = state.data, box = $("whatif"); if (!d || !box) return;
+  const fx = d.rates.today;
+  // it.src === "closed" — снимок на момент продажи получен; иначе цена продажи неизвестна и сравнивать не с чем
+  const cl = d.items.filter(x => x.p.closed && x.src === "closed" && x.mkt && x.mkt.price != null);
+  if (!cl.length) { box.style.display = "none"; return; }
+  box.style.display = "";
+  const T = {sale: 0, now: 0, post: 0, qty: 0};
+  const html = cl.map(it => {
+    const p = it.p, mk = it.mkt;
+    const sale = it.cleanRub + it.nkdRub;          // выручка от продажи — реальные деньги, всегда с НКД
+    const now  = mk.cleanRub + mk.nkdRub;          // столько стоила бы позиция сегодня
+    const post = it.coup.postRub || 0;             // купоны, пришедшие уже после продажи
+    const dR = now + post - sale, dP = sale ? dR / sale * 100 : null;
+    const unit = now / p.qty;                      // цена одной бумаги с НКД сегодня, ₽
+    const buy = unit > 0 ? Math.floor(sale / unit) : null, dQty = buy != null ? buy - p.qty : null;
+    const fxC = it.fxClose || fx;
+    T.sale += sale; T.now += now; T.post += post; T.qty += p.qty;
+    return `<tr>
+      <td class="name">${short(p.name)}<div class="s">${fmt(p.qty)} шт · продана ${closedLbl(p)}</div></td>
+      <td class="num">${it.price.toFixed(2)} → ${mk.price.toFixed(2)}%<div class="s">${sgn(mk.price - it.price, 2)} п.п.${it.quasi ? ` · курс ${fxC.toFixed(2)} → ${fx.toFixed(2)}` : ""}</div></td>
+      <td class="num">${fmt(sale)}<div class="s">${fmt(sale / fxC)} $</div></td>
+      <td class="num">${fmt(now)}<div class="s">${fmt(now / fx)} $ · ${fmt(unit)} за шт</div></td>
+      <td class="num ${post > 0 ? "pos" : "flat"}">${post ? fmt(post) : "—"}<div class="s">${post ? fmt(it.coup.postUsd) + " $ · " + it.coup.postN + " выпл." : "выплат не было"}</div></td>
+      <td class="num delta ${dR > 0 ? "neg" : dR < 0 ? "pos" : "flat"}">${sgn(dR)}<div class="s">${pct(dP)} · ${dR > 0 ? "упущено" : dR < 0 ? "сэкономлено" : "как продали"}</div></td>
+      <td class="num ${dQty > 0 ? "pos" : dQty < 0 ? "neg" : "flat"}">${buy != null ? fmt(buy) + " шт" : "—"}<div class="s">${dQty != null ? sgn(dQty) + " шт к проданным " + fmt(p.qty) : ""}</div></td>
+    </tr>`;
+  }).join("");
+  const dT = T.now + T.post - T.sale, dTP = T.sale ? dT / T.sale * 100 : null;
+  const vol = T.now ? T.sale / T.now * 100 : null;   // сколько прежнего объёма берётся на выручку
+  $("wiRows").innerHTML = html + `<tr class="tot"><td>Итого<div class="s">${cl.length} закрытых</div></td><td></td>
+    <td class="num">${fmt(T.sale)}</td>
+    <td class="num">${fmt(T.now)}<div class="s">${fmt(T.now / fx)} $</div></td>
+    <td class="num ${T.post > 0 ? "pos" : "flat"}">${T.post ? fmt(T.post) : "—"}</td>
+    <td class="num delta ${dT > 0 ? "neg" : dT < 0 ? "pos" : "flat"}">${sgn(dT)}<div class="s">${pct(dTP)}</div></td>
+    <td class="num ${vol > 100 ? "pos" : vol < 100 ? "neg" : "flat"}">${vol != null ? vol.toFixed(1) + "%" : "—"}<div class="s">прежнего объёма</div></td></tr>`;
+  $("wiSum").textContent = `Продано ${cl.length} поз. за ${fmt(T.sale / 1e6, 2)} млн ₽ · сегодня те же бумаги стоили бы ${fmt(T.now / 1e6, 2)} млн`
+    + (T.post ? ` + ${fmt(T.post / 1e6, 2)} млн купонов` : "")
+    + ` → ${dT > 0 ? "упущено" : "сэкономлено"} ${fmt(Math.abs(dT) / 1e6, 2)} млн (${dTP != null ? Math.abs(dTP).toFixed(2) : "—"}%)`
+    + (vol != null ? ` · на выручку сейчас берётся ${vol.toFixed(1)}% прежнего объёма` : "");
 }
 
 function renderFx() {
@@ -479,6 +559,8 @@ async function fixingHistory(from) {
   }
   return out;
 }
+// в режиме «если бы не продавал» закрытая позиция берётся по рынку (it.mkt), а не по замороженной выручке
+const ghostBase = (it, ghost) => (ghost && it && it.p.closed && it.mkt && it.mkt.price != null) ? it.mkt : it;
 const asOf = (arr, key, d, before = false) => { let best = null; for (const r of arr) { if (before ? r.d < d : r.d <= d) best = r[key]; else break; } return best; };
 async function loadHistory() {
   const lotDates = POSITIONS.flatMap(p => (p.lots || []).map(l => l.date)).filter(Boolean);
@@ -496,16 +578,17 @@ async function loadHistory() {
   if (state.range === "d") await loadIntraday().catch(e => console.warn("intraday", e));
   redrawCharts();
 }
-function seriesValue(nkd) {
+function seriesValue(nkd, ghost) {
   // стоимость портфеля по дням: курс ЦБ на дату D = фиксинг предыдущего торгового дня
   // с дня продажи закрытая позиция входит в линию не котировкой, а выручкой — портфель не «проваливается»
+  // ghost=true — линия «если бы не продавал»: закрытые позиции идут по рынку и после продажи
   const byId = state.data ? Object.fromEntries(state.data.items.map(x => [x.p.secid, x])) : {};
   const pts = [];
   for (const d of HIST.dates) {
     const fx = asOf(HIST.fix, "v", d, true); if (!fx) continue;
     let v = 0, ok = true;
     for (const p of POSITIONS) {
-      if (p.closed && d >= closedDay(p)) { const x = byId[p.secid]; if (!x) { ok = false; break; } v += x.cleanRub + (nkd ? x.nkdRub : 0); continue; }
+      if (!ghost && p.closed && d >= closedDay(p)) { const x = byId[p.secid]; if (!x) { ok = false; break; } v += x.cleanRub + (nkd ? x.nkdRub : 0); continue; }
       const h = HIST.perBond[p.secid]; let row = null; for (const r of h) { if (r.d <= d) row = r; else break; }
       if (!row) { ok = false; break; }
       v += p.qty * (row.face * row.close / 100 * fx + (nkd ? row.acc : 0));
@@ -515,7 +598,7 @@ function seriesValue(nkd) {
   // сегодняшняя точка из живой таблицы
   if (state.data) {
     const it = state.data.items; const today = new Date().toISOString().slice(0,10);
-    const v = it.reduce((a, x) => a + x.cleanRub + (nkd ? x.nkdRub : 0), 0);
+    const v = it.reduce((a, x) => { const b = ghostBase(x, ghost); return a + b.cleanRub + (nkd ? b.nkdRub : 0); }, 0);
     if (pts.length && pts[pts.length-1].d === today) pts[pts.length-1].v = v; else pts.push({d: today, v, live: true});
   }
   return pts.map(q => ({...q, t: Date.parse(q.d)}));
@@ -565,56 +648,59 @@ async function candles(secid, from) {
 async function loadIntraday() {
   const f = new Date(); f.setDate(f.getDate() - 6);            // если сегодня выходной — покажем последний торговый день
   const from = f.toISOString().slice(0,10);
-  const res = await Promise.all(POSITIONS.map(p => (p.closed && closedDay(p) < from) ? Promise.resolve([])   // закрыта раньше — свечи не нужны
-    : candles(p.secid, from).catch(e => { console.warn("candles", p.secid, e); return []; })));
+  const res = await Promise.all(POSITIONS.map(p => candles(p.secid, from)   // и по закрытым тоже: из них строится линия «если бы не продавал»
+    .catch(e => { console.warn("candles", p.secid, e); return []; })));
   const days = res.flat().map(r => r.d).sort();
   const day = days.length ? days[days.length-1] : null;
   const byBond = {}; POSITIONS.forEach((p, i) => byBond[p.secid] = res[i].filter(r => r.d === day));
   INTRA = {day, byBond};
 }
 // стоимость по свече: живая цена бумаги масштабируется отношением цен (номинал, курс и НКД те же, что в таблице)
-function seriesIntraday(nkd) {
+function seriesIntraday(nkd, ghost) {
   if (!INTRA || !INTRA.day || !state.data) return [];
   const items = {}; for (const it of state.data.items) items[it.p.secid] = it;
+  const bas = p => ghostBase(items[p.secid], ghost);            // ghost: закрытые позиции тоже идут по рынку
   const cs = {}, idx = {}, cur = {}, times = new Set();
   // позиции, закрытые до показываемого дня, — постоянная составляющая линии (выручка); закрытая в этот день идёт по рынку до минуты продажи
-  const live = POSITIONS.filter(p => !p.closed || closedDay(p) === INTRA.day);
-  const frozen = POSITIONS.filter(p => p.closed && closedDay(p) !== INTRA.day)
+  const live = ghost ? POSITIONS.slice() : POSITIONS.filter(p => !p.closed || closedDay(p) === INTRA.day);
+  const frozen = ghost ? 0 : POSITIONS.filter(p => p.closed && closedDay(p) !== INTRA.day)
     .reduce((a, p) => { const x = items[p.secid]; return a + (x ? x.cleanRub + (nkd ? x.nkdRub : 0) : 0); }, 0);
   for (const p of live) {
-    const it = items[p.secid]; if (!it || !it.price) return [];
+    const b = bas(p); if (!b || !b.price) return [];
     const arr = INTRA.byBond[p.secid] || []; cs[p.secid] = arr; idx[p.secid] = 0;
     arr.forEach(c => times.add(c.t));
     let row = null; for (const r of (HIST && HIST.perBond[p.secid]) || []) { if (r.d < INTRA.day) row = r; else break; }
-    cur[p.secid] = row ? row.close : (arr.length ? arr[0].close : it.price);   // до первой сделки — вчерашнее закрытие
+    cur[p.secid] = row ? row.close : (arr.length ? arr[0].close : b.price);   // до первой сделки — вчерашнее закрытие
   }
   const ts = [...times].sort((a, b) => a - b); if (!ts.length) return [];
   const pts = [];
   for (const t of ts) {
     let v = frozen;
     for (const p of live) {
-      const lim = p.closed ? closedTs(p) : Infinity, tc = t < lim ? t : lim;
+      const lim = (!ghost && p.closed) ? closedTs(p) : Infinity, tc = t < lim ? t : lim;
       const arr = cs[p.secid]; while (idx[p.secid] < arr.length && arr[idx[p.secid]].t <= tc) cur[p.secid] = arr[idx[p.secid]++].close;
-      const it = items[p.secid];
-      v += (t > lim ? it.cleanRub : it.cleanRub * cur[p.secid] / it.price) + (nkd ? it.nkdRub : 0);   // после продажи — ровно выручка
+      const b = bas(p);
+      v += (t > lim ? b.cleanRub : b.cleanRub * cur[p.secid] / b.price) + (nkd ? b.nkdRub : 0);   // после продажи — ровно выручка
     }
     pts.push({d: INTRA.day, t, v});
   }
   if (INTRA.day === mskDay(Date.now())) {                       // последняя точка — из живой таблицы
-    const v = state.data.items.reduce((a, x) => a + x.cleanRub + (nkd ? x.nkdRub : 0), 0);
+    const v = state.data.items.reduce((a, x) => { const b = ghostBase(x, ghost); return a + b.cleanRub + (nkd ? b.nkdRub : 0); }, 0);
     pts.push({d: INTRA.day, t: Date.now(), v, live: true});
   }
   return pts;
 }
-function bondIntraday(p, nkd) {
+function bondIntraday(p, nkd, ghost) {
   if (!INTRA || !INTRA.day || !state.data) return [];
-  if (p.closed && closedDay(p) !== INTRA.day) return [];      // закрыта раньше — внутри дня показывать нечего
-  const it = state.data.items.find(x => x.p.secid === p.secid); if (!it || !it.price) return [];
-  const fx = it.fxClose || state.data.rates.today, lim = p.closed ? closedTs(p) : Infinity;
+  const it = state.data.items.find(x => x.p.secid === p.secid); if (!it) return [];
+  const gh = !!ghost && !!p.closed && !!it.mkt && it.mkt.price != null;      // линия «если бы не продал» — по рынку, без остановки на минуте продажи
+  if (!gh && p.closed && closedDay(p) !== INTRA.day) return [];              // закрыта раньше — внутри дня показывать нечего
+  const b = gh ? it.mkt : it; if (!b.price) return [];
+  const fx = gh ? state.data.rates.today : (it.fxClose || state.data.rates.today), lim = (!gh && p.closed) ? closedTs(p) : Infinity;
   const pts = (INTRA.byBond[p.secid] || []).filter(c => c.t <= lim)
-    .map(c => ({d: INTRA.day, t: c.t, v: it.cleanRub * c.close / it.price + (nkd ? it.nkdRub : 0), fx}));
-  if (p.closed) { if (pts.length) pts.push({d: INTRA.day, t: lim, v: it.cleanRub + (nkd ? it.nkdRub : 0), fx, sale: true}); return pts; }
-  if (pts.length && INTRA.day === mskDay(Date.now())) pts.push({d: INTRA.day, t: Date.now(), v: it.cleanRub + (nkd ? it.nkdRub : 0), fx, live: true});
+    .map(c => ({d: INTRA.day, t: c.t, v: b.cleanRub * c.close / b.price + (nkd ? b.nkdRub : 0), fx, ghost: gh}));
+  if (!gh && p.closed) { if (pts.length) pts.push({d: INTRA.day, t: lim, v: it.cleanRub + (nkd ? it.nkdRub : 0), fx, sale: true}); return pts; }
+  if (pts.length && INTRA.day === mskDay(Date.now())) pts.push({d: INTRA.day, t: Date.now(), v: b.cleanRub + (nkd ? b.nkdRub : 0), fx, live: true, ghost: gh});
   return pts;
 }
 function syncRange() { document.querySelectorAll("#rangeSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.range === state.range))); }
@@ -635,12 +721,19 @@ function drawChart() {
   const pts = day ? seriesIntraday(nkd) : clipRange(seriesValue(nkd));
   if (pts.length < 2) { $("chart").innerHTML = '<div class="sub">' + (day ? "сегодня сделок ещё не было" : "мало данных за период") + '</div>'; return; }
   const cost = POSITIONS.every(p => p.cost_rub != null) ? POSITIONS.reduce((a,p) => a + p.cost_rub, 0) : null;
+  // «если бы не продавал»: та же линия, но закрытые позиции идут по рынку — ведём её от первой продажи
+  let gpts = [];
+  if (POSITIONS.some(q => q.closed) && state.data) {
+    const firstSale = Math.min(...POSITIONS.filter(q => q.closed).map(q => day ? closedTs(q) : Date.parse(closedDay(q))));
+    gpts = (day ? seriesIntraday(nkd, true) : clipRange(seriesValue(nkd, true))).filter(q => q.t >= firstSale && q.t >= pts[0].t);
+    if (gpts.length < 2) gpts = [];
+  }
   // курс ЦБ на те же даты (на дату D действует фиксинг предыдущего торгового дня); сегодня — живой курс. Внутри дня курс не меняется — вторую ось не рисуем
   const fxPts = day ? [] : pts.map(p => ({d: p.d, t: p.t, v: p.live && state.data ? state.data.rates.today : asOf(HIST.fix, "v", p.d, true)})).filter(p => p.v);
   const fxVary = fxPts.length > 1 && fxPts.some(p => p.v !== fxPts[0].v);
   const W = 900, H = 260, pl = 52, pr = fxVary ? 118 : 78, pt = 14, pb = 26;
   const t0 = pts[0].t, t1 = pts[pts.length-1].t;
-  const vs = pts.map(p => p.v/1e6).concat(cost != null && state.range === "y" ? [cost/1e6] : []);
+  const vs = pts.map(p => p.v/1e6).concat(gpts.map(p => p.v/1e6)).concat(cost != null && state.range === "y" ? [cost/1e6] : []);
   let lo = Math.min(...vs), hi = Math.max(...vs); const m = (hi - lo) * 0.08 || 1; lo -= m; hi += m;
   const X = t => pl + (t - t0) / (t1 - t0 || 1) * (W - pl - pr), Y = v => H - pb - (v - lo) / (hi - lo) * (H - pb - pt);
   const showCost = cost != null && cost/1e6 >= lo && cost/1e6 <= hi;
@@ -679,6 +772,7 @@ function drawChart() {
     const fpath = fxPts.map((p,i) => (i?"L":"M") + X(p.t).toFixed(1) + "," + Y2(p.v).toFixed(1)).join(" ");
     g += `<path class="line2" d="${fpath}"/>`;
   }
+  if (gpts.length) g += `<path class="ghost" d="${gpts.map((q,i) => (i?"L":"M") + X(q.t).toFixed(1) + "," + Y(q.v/1e6).toFixed(1)).join(" ")}"/>`;
   g += `<path class="line" d="${path}"/>`;
   if (showCost) { const yc = Y(cost/1e6); g += `<line class="ref" x1="${pl}" x2="${W-pr}" y1="${yc.toFixed(1)}" y2="${yc.toFixed(1)}"/><text class="reflab" x="${W-pr-6}" y="${(yc-5).toFixed(1)}" text-anchor="end">вложено ${(cost/1e6).toFixed(2)}</text>`; }
   const last = pts[pts.length-1]; const lx = X(t1), ly = Y(last.v/1e6);
@@ -691,7 +785,9 @@ function drawChart() {
   g += `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text class="endlab" x="${(lx+8).toFixed(1)}" y="${lastLabelY.toFixed(1)}">${(last.v/1e6).toFixed(2)}</text>`;
   g += `<g id="hov" class="hovg" style="display:none"><line class="axis" id="hovx" y1="${pt}" y2="${H-pb}" style="stroke:var(--ink);opacity:.5"/><circle id="hovc" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></g></svg>`;
   $("chart").innerHTML = g;
+  const glast = gpts.length ? gpts[gpts.length-1] : null;
   $("legend").innerHTML = `<span><i style="background:var(--accent)"></i>стоимость портфеля, млн ₽${fxVary ? " (левая ось)" : ""}</span>`
+    + (glast ? `<span><i style="background:var(--muted)"></i>если бы не продавал — ${(glast.v/1e6).toFixed(2)} млн (${sgn(glast.v - last.v)} ₽)</span>` : "")
     + (fxVary ? `<span><i style="background:var(--fx)"></i>курс ЦБ, ₽/$ (правая ось)</span>` : `<span>курс ЦБ внутри дня не меняется — ${state.data ? state.data.rates.today.toFixed(2) : "—"} ₽/$</span>`);
   const mn = pts.reduce((a,p) => p.v < a.v ? p : a), mx = pts.reduce((a,p) => p.v > a.v ? p : a);
   const per = day ? `${dmy(INTRA.day)} внутри дня · свечи 10 мин`
@@ -711,7 +807,10 @@ function drawChart() {
     const hov = svg.querySelector("#hov"); hov.style.display = ""; svg.querySelector("#hovx").setAttribute("x1", cx); svg.querySelector("#hovx").setAttribute("x2", cx);
     svg.querySelector("#hovc").setAttribute("cx", cx); svg.querySelector("#hovc").setAttribute("cy", cy);
     const bf = fxVary ? fxPts.find(p => p.t === best.t) : null;
-    tip.innerHTML = `<div style="color:var(--muted)">${ptLabel(best)}</div><b>${(best.v/1e6).toFixed(2)} млн ₽</b>` + (cost ? `<div>${sgn(best.v - cost)} к вложениям</div>` : "") + (bf ? `<div style="color:var(--fx)">курс ЦБ ${bf.v.toFixed(4)}</div>` : "");
+    const bg = gpts.length ? gpts.find(p => p.t === best.t) : null;
+    tip.innerHTML = `<div style="color:var(--muted)">${ptLabel(best)}</div><b>${(best.v/1e6).toFixed(2)} млн ₽</b>` + (cost ? `<div>${sgn(best.v - cost)} к вложениям</div>` : "")
+      + (bg ? `<div style="color:var(--muted)">не продавал бы: ${(bg.v/1e6).toFixed(2)} млн (${sgn(bg.v - best.v)})</div>` : "")
+      + (bf ? `<div style="color:var(--fx)">курс ЦБ ${bf.v.toFixed(4)}</div>` : "");
     tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + "px"; tip.style.top = Math.max(8, e.clientY - 70) + "px";
   };
   svg.addEventListener("pointermove", showAt);
@@ -734,32 +833,47 @@ function bondCardHTML(p) {
   const h = (HIST.perBond[p.secid] || []); const nkd = state.withNkd, day = state.range === "d";
   const it = state.data ? state.data.items.find(x => x.p.secid === p.secid) : null;
   const cl = !!p.closed;
-  let pts;
-  if (day) pts = bondIntraday(p, nkd);                 // у закрытой в этот день — линия до минуты продажи, у закрытой раньше — пусто
+  let pts, gpts = [];                                  // gpts — «если бы не продал»: рынок после момента продажи, рисуется пунктиром
+  if (day) { pts = bondIntraday(p, nkd); if (cl) gpts = bondIntraday(p, nkd, true); }   // закрытая раньше: сплошной линии нет, только пунктир
   else {
     pts = [];
     for (const r of h) { if (cl && r.d >= closedDay(p)) break;      // после продажи истории по позиции нет
       const fx = asOf(HIST.fix, "v", r.d, true); if (!fx) continue; pts.push({d: r.d, t: Date.parse(r.d), v: p.qty * (r.face * r.close / 100 * fx + (nkd ? r.acc : 0)), fx}); }
     if (cl && it) {   // последняя точка — момент продажи, значение = выручка (как в таблице)
-      pts.push({d: closedDay(p), t: closedTs(p), v: it.cleanRub + (nkd ? it.nkdRub : 0), fx: it.fxClose || state.data.rates.today, sale: true});
+      const sale = {d: closedDay(p), t: closedTs(p), v: it.cleanRub + (nkd ? it.nkdRub : 0), fx: it.fxClose || state.data.rates.today};
+      pts.push({...sale, sale: true});
+      gpts.push({...sale, ghost: true});                            // пунктир стартует из точки продажи
+      for (const r of h) { if (r.d <= closedDay(p)) continue;       // день продажи уже представлен точкой продажи
+        const fx = asOf(HIST.fix, "v", r.d, true); if (!fx) continue;
+        gpts.push({d: r.d, t: Date.parse(r.d), v: p.qty * (r.face * r.close / 100 * fx + (nkd ? r.acc : 0)), fx, ghost: true}); }
+      if (it.mkt && it.mkt.price != null) {                          // сегодняшняя точка — по живой котировке
+        const today = new Date().toISOString().slice(0,10), v = it.mkt.cleanRub + (nkd ? it.mkt.nkdRub : 0), fx = state.data.rates.today;
+        if (gpts.length > 1 && gpts[gpts.length-1].d === today) { gpts[gpts.length-1].v = v; gpts[gpts.length-1].fx = fx; gpts[gpts.length-1].live = true; }
+        else gpts.push({d: today, t: Date.parse(today), v, fx, live: true, ghost: true});
+      }
     } else if (it) { const today = new Date().toISOString().slice(0,10); const v = it.cleanRub + (nkd ? it.nkdRub : 0); const fx = state.data.rates.today;
       if (pts.length && pts[pts.length-1].d === today) { pts[pts.length-1].v = v; pts[pts.length-1].fx = fx; }
       else pts.push({d: today, t: Date.parse(today), v, fx, live: true}); }
     pts = clipRange(pts);
+    if (gpts.length) { gpts = clipRange(gpts); if (gpts.length < 2) gpts = []; }
   }
+  if (gpts.length < 2) gpts = [];
   const id = "bc_" + p.secid;
-  if (pts.length < 2) return `<div class="chart-card${cl ? " closed" : ""}" id="${id}"><div class="t">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}</div><div class="s">${cl ? "позиция закрыта " + closedLbl(p) : (day ? "сегодня сделок по бумаге не было" : "мало данных за выбранный период")}</div></div>`;
+  if (pts.length < 2 && !gpts.length) return `<div class="chart-card${cl ? " closed" : ""}" id="${id}"><div class="t">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}</div><div class="s">${cl ? "позиция закрыта " + closedLbl(p) : (day ? "сегодня сделок по бумаге не было" : "мало данных за выбранный период")}</div></div>`;
+  const all = gpts.length ? pts.concat(gpts) : pts;
   const cost = p.cost_rub;
-  const fxVary = pts.some(q => q.fx !== pts[0].fx);
+  const fxVary = all.some(q => q.fx !== all[0].fx);
   const W = 460, H = 185, pl = 48, pr = fxVary ? 56 : 44, ptp = 12, pb = 22;
-  const t0 = pts[0].t, t1 = pts[pts.length-1].t;
-  const vs = pts.map(q => q.v/1e6).concat(cost != null && state.range === "y" ? [cost/1e6] : []);
+  const t0 = Math.min(...all.map(q => q.t)), t1 = Math.max(...all.map(q => q.t));
+  // уровень выручки от продажи: пунктир ниже него = бумага сейчас дешевле, чем её продали
+  const exitV = (cl && it && it.src === "closed" && gpts.length) ? it.cleanRub + (nkd ? it.nkdRub : 0) : null;
+  const vs = all.map(q => q.v/1e6).concat(exitV != null ? [exitV/1e6] : []).concat(cost != null && state.range === "y" ? [cost/1e6] : []);
   let lo = Math.min(...vs), hi = Math.max(...vs); const mg = (hi - lo) * 0.08 || .5; lo -= mg; hi += mg;
   const X = t => pl + (t - t0) / (t1 - t0 || 1) * (W - pl - pr), Y = v => H - pb - (v - lo) / (hi - lo) * (H - pb - ptp);
   const showCost = cost != null && cost/1e6 >= lo && cost/1e6 <= hi;
   let Y2 = null;
   if (fxVary) {
-    let flo = Math.min(...pts.map(q => q.fx)), fhi = Math.max(...pts.map(q => q.fx)); const fmg = (fhi - flo) * 0.08 || .5; flo -= fmg; fhi += fmg;
+    let flo = Math.min(...all.map(q => q.fx)), fhi = Math.max(...all.map(q => q.fx)); const fmg = (fhi - flo) * 0.08 || .5; flo -= fmg; fhi += fmg;
     Y2 = v => H - pb - (v - flo) / (fhi - flo) * (H - pb - ptp);
   }
   const span = hi - lo, raw = span / 3, mag = Math.pow(10, Math.floor(Math.log10(raw))); let step = mag; for (const k of [1,2,2.5,5,10]) { step = k * mag; if (span / step <= 4) break; }
@@ -768,30 +882,47 @@ function bondCardHTML(p) {
   for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W-pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="tick" x="${pl-6}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end">${v.toFixed(dec)}</text>`;
   for (const tk of xTicks(t0, t1)) g += `<text class="tick" x="${X(tk.t).toFixed(1)}" y="${H-6}" text-anchor="middle">${tk.label}</text>`;
   g += `<line class="axis" x1="${pl}" x2="${W-pr}" y1="${H-pb}" y2="${H-pb}"/>`;
-  const path = pts.map((q,i) => (i?"L":"M") + X(q.t).toFixed(1) + "," + Y(q.v/1e6).toFixed(1)).join(" ");
-  g += `<path class="area" d="${path} L${X(t1).toFixed(1)},${H-pb} L${X(t0).toFixed(1)},${H-pb} Z"/>`;
-  if (fxVary) g += `<path class="line2" d="${pts.map((q,i) => (i?"L":"M") + X(q.t).toFixed(1) + "," + Y2(q.fx).toFixed(1)).join(" ")}"/>`;
-  g += `<path class="line" d="${path}"/>`;
+  const path = pts.length > 1 ? pts.map((q,i) => (i?"L":"M") + X(q.t).toFixed(1) + "," + Y(q.v/1e6).toFixed(1)).join(" ") : null;
+  if (path) g += `<path class="area" d="${path} L${X(pts[pts.length-1].t).toFixed(1)},${H-pb} L${X(pts[0].t).toFixed(1)},${H-pb} Z"/>`;
+  if (fxVary) g += `<path class="line2" d="${all.map((q,i) => (i?"L":"M") + X(q.t).toFixed(1) + "," + Y2(q.fx).toFixed(1)).join(" ")}"/>`;
+  if (gpts.length) g += `<path class="ghost" d="${gpts.map((q,i) => (i?"L":"M") + X(q.t).toFixed(1) + "," + Y(q.v/1e6).toFixed(1)).join(" ")}"/>`;
+  if (path) g += `<path class="line" d="${path}"/>`;
   if (showCost) { const yc = Y(cost/1e6); g += `<line class="ref" x1="${pl}" x2="${W-pr}" y1="${yc.toFixed(1)}" y2="${yc.toFixed(1)}"/>`; }
-  const lastq = pts[pts.length-1];
-  if (lastq.sale) { const sx = X(lastq.t); g += `<line class="sale" x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${ptp}" y2="${H-pb}"/><text class="salelab" x="${(sx-4).toFixed(1)}" y="${ptp+9}" text-anchor="end">продажа</text>`; }
-  g += `<circle cx="${X(t1).toFixed(1)}" cy="${Y(lastq.v/1e6).toFixed(1)}" r="3.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text class="endlab" x="${(X(t1)+6).toFixed(1)}" y="${(Y(lastq.v/1e6)+4).toFixed(1)}">${(lastq.v/1e6).toFixed(2)}</text>`;
-  if (fxVary) g += `<text class="tick2" x="${(W-pr+6).toFixed(1)}" y="${(Y2(lastq.fx)+4).toFixed(1)}">${lastq.fx.toFixed(1)}</text>`;
+  const lastq = pts.length ? pts[pts.length-1] : null;
+  if (lastq && lastq.sale) { const sx = X(lastq.t); g += `<line class="sale" x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${ptp}" y2="${H-pb}"/><text class="salelab" x="${(sx-4).toFixed(1)}" y="${ptp+9}" text-anchor="end">продажа</text>`; }
+  if (exitV != null) {   // горизонталь «выручка»: видно, где пунктир её пересекает
+    const ys = Y(exitV/1e6), x0 = lastq && lastq.sale ? X(lastq.t) : pl;
+    g += `<line class="sale" x1="${x0.toFixed(1)}" x2="${(W-pr).toFixed(1)}" y1="${ys.toFixed(1)}" y2="${ys.toFixed(1)}"/><text class="salelab" x="${(x0+3).toFixed(1)}" y="${(ys-3).toFixed(1)}">выручка</text>`;
+  }
+  if (lastq) g += `<circle cx="${X(lastq.t).toFixed(1)}" cy="${Y(lastq.v/1e6).toFixed(1)}" r="3.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text class="endlab" x="${(X(lastq.t)+6).toFixed(1)}" y="${(Y(lastq.v/1e6)+4).toFixed(1)}">${(lastq.v/1e6).toFixed(2)}</text>`;
+  if (gpts.length) { const q = gpts[gpts.length-1];
+    g += `<circle cx="${X(q.t).toFixed(1)}" cy="${Y(q.v/1e6).toFixed(1)}" r="3.5" fill="var(--surface)" stroke="var(--muted)" stroke-width="2"/><text class="ghostlab" x="${(X(q.t)+6).toFixed(1)}" y="${(Y(q.v/1e6)+4).toFixed(1)}">${(q.v/1e6).toFixed(2)}</text>`; }
+  if (fxVary) { const q = all[all.length-1]; g += `<text class="tick2" x="${(W-pr+6).toFixed(1)}" y="${(Y2(q.fx)+4).toFixed(1)}">${q.fx.toFixed(1)}</text>`; }
   g += `<g class="hovg" style="display:none"><line class="bx" y1="${ptp}" y2="${H-pb}" style="stroke:var(--ink);opacity:.5;stroke-width:1"/><circle class="bc" r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></g></svg>`;
-  BONDBIND.push({id, pts, cost, W, H, pl, pr, ptp, pb, t0, t1, lo, hi, fxVary});
+  BONDBIND.push({id, pts: all, cost, W, H, pl, pr, ptp, pb, t0, t1, lo, hi, fxVary});
   const sec = it ? it.s : {}, mrow = it ? it.m : {}, coup = it ? it.coup : {rub: null};
   const nowV = it ? it.cleanRub + (nkd ? it.nkdRub : 0) : null;
   const dR = (nowV != null && cost != null) ? nowV - cost : null;
   const bought = (p.lots || []).map(l => l.date.split("-").reverse().join(".")).join(", ");
   const buyTxt = (it && it.buyPct != null) ? ` по ${it.buyPct.toFixed(2)}%` : "";
   const above = it && it.buyPct != null && it.buyPct > 100;
-  const scale = cl ? "до продажи" : day ? `${dmy(INTRA.day)} внутри дня` : RANGE_LBL[state.range];
+  const dmyDay = day && INTRA && INTRA.day ? dmy(INTRA.day) : "";
+  const scale = cl ? `${day ? dmyDay + " внутри дня" : "до продажи"}${gpts.length ? " · пунктир — если бы не продал" : ""}`
+              : day ? `${dmyDay} внутри дня` : RANGE_LBL[state.range];
   const held = cl && p.lots && p.lots.length ? Math.round((closedTs(p) - Date.parse(p.lots.map(l => l.date).sort()[0])) / 864e5) : null;
   const sub = `${p.qty} шт · куплено ${bought}${buyTxt} · ${cl ? `продана ${closedLbl(p)}${held != null ? ` · в портфеле ${held} дн.` : ""}`
     : `до ${sec.MATDATE ? sec.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${mrow.YIELD ?? "—"}%`} · ${scale}, млн ₽${fxVary ? " (левая ось), курс ЦБ (правая)" : ""}`;
   const line2 = (cost != null && nowV != null)
     ? `вложено ${fmt(cost)} ${cl ? "→ продана за" : "→"} ${fmt(nowV)} (<span class="${dR >= 0 ? "cpos" : "cneg"}">${sgn(dR)}</span>${nkd ? "" : ", без НКД"}) · купоны ${coup.rub != null ? fmt(coup.rub) : "—"}${cl && coup.rub != null && dR != null ? ` · итог ${sgn(dR + coup.rub)}` : ""}` : "";
-  return `<div class="chart-card${cl ? " closed" : above ? " above" : ""}" id="${id}"><div class="t">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}</div><div class="s">${sub}</div><div class="s">${line2}</div>${g}</div>`;
+  // «если бы не продал» — по факту сегодня: сколько стоила бы позиция и сколько бумаг берётся обратно на выручку
+  let line3 = "";
+  if (cl && it && it.src === "closed" && it.mkt && it.mkt.price != null) {
+    const sale = it.cleanRub + it.nkdRub, now = it.mkt.cleanRub + it.mkt.nkdRub, post = it.coup.postRub || 0, diff = now + post - sale;
+    const buy = now > 0 ? Math.floor(sale / (now / p.qty)) : null;
+    line3 = `если бы не продал: сейчас ${fmt(now)}${post ? ` + ${fmt(post)} купонов` : ""} → <span class="${diff > 0 ? "cneg" : "cpos"}">${sgn(diff)}</span>`
+          + (buy != null ? ` · на выручку берётся ${fmt(buy)} шт (${sgn(buy - p.qty)})` : "");
+  }
+  return `<div class="chart-card${cl ? " closed" : above ? " above" : ""}" id="${id}"><div class="t">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}</div><div class="s">${sub}</div><div class="s">${line2}</div>${line3 ? `<div class="s">${line3}</div>` : ""}${g}</div>`;
 }
 function drawBondCharts() {
   const cont = $("bonds"); if (!cont || !HIST) return;
@@ -813,7 +944,7 @@ function bindBondHover(svg, b) {
     const h = svg.querySelector(".hovg"); h.style.display = "";
     const bx = svg.querySelector(".bx"); bx.setAttribute("x1", cx); bx.setAttribute("x2", cx);
     const bc = svg.querySelector(".bc"); bc.setAttribute("cx", cx); bc.setAttribute("cy", cy);
-    tip.innerHTML = `<div style="color:var(--muted)">${ptLabel(best)}</div><b>${fmt(best.v)} ₽</b>` + (b.cost ? `<div>${sgn(best.v - b.cost)} к вложениям</div>` : "") + (b.fxVary ? `<div style="color:var(--fx)">курс ЦБ ${best.fx.toFixed(4)}</div>` : "");
+    tip.innerHTML = `<div style="color:var(--muted)">${ptLabel(best)}${best.ghost ? " · если бы не продал" : ""}</div><b>${fmt(best.v)} ₽</b>` + (b.cost ? `<div>${sgn(best.v - b.cost)} к вложениям</div>` : "") + (b.fxVary ? `<div style="color:var(--fx)">курс ЦБ ${best.fx.toFixed(4)}</div>` : "");
     tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + "px"; tip.style.top = Math.max(8, e.clientY - 80) + "px";
   };
   svg.addEventListener("pointermove", show); svg.addEventListener("pointerdown", show);
