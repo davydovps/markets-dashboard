@@ -162,13 +162,13 @@ svg .area { fill: var(--accent); opacity:.10; }
   <div class="tw"><table>
   <thead><tr>
     <th>Бумага</th><th class="num" style="white-space:normal">Цена: продажа → бид&nbsp;/&nbsp;оффер</th><th class="num">Выручка</th>
-    <th class="num" style="white-space:normal">Продал бы сейчас за</th><th class="num" style="white-space:normal">Купоны после&nbsp;продажи</th>
+    <th class="num" style="white-space:normal">Продал бы сейчас за</th>
     <th class="num">Δ если бы держал</th><th class="num" style="white-space:normal">Выкуп на&nbsp;выручку</th>
   </tr></thead>
   <tbody id="wiRows"></tbody></table></div>
   <p class="sub" style="max-width:80ch;margin-top:10px">Что было бы, если бы позиции не продавали, — сделки эмулируются по стакану, а не по последней сделке:
   продажа идёт <b>в бид</b>, выкуп — <b>с оффера</b>, так что спред уже учтён. «Продал бы сейчас за» — те же бумаги по лучшему биду, с НКД, по сегодняшнему курсу ЦБ;
-  «купоны после продажи» — выплаты, прошедшие уже после даты продажи. «Δ если бы держал» = продал&nbsp;бы + купоны − выручка:
+  «Δ если бы держал» = продал&nbsp;бы (с купонами, если после продажи были выплаты) − выручка:
   <span class="cneg">красное</span> — столько упущено, <span class="cpos">зелёное</span> — столько сэкономлено на продаже.
   «Выкуп на выручку» — сколько бумаг берётся сегодня на ту же выручку по офферу (рублёвая цена одной бумаги с НКД, без комиссии и налога с прибыли):
   больше проданного количества — значит откупить сейчас дешевле, чем продали. Всё считается с НКД независимо от галки «НКД».
@@ -539,7 +539,6 @@ function renderWhatIf() {
       <td class="num">${it.price.toFixed(2)} → ${live ? `${pp(bid)} / ${pp(ask)}` : pp(mk.price)}%<div class="s">${live ? `бид ${sgn(bid - it.price, 2)} п.п. · спред ${pp(ask - bid)}` : "стакан пуст — по сделке " + sgn(mk.price - it.price, 2) + " п.п."}${it.quasi ? ` · курс ${fxC.toFixed(2)} → ${fx.toFixed(2)}` : ""}</div></td>
       <td class="num">${fmt(sale)}<div class="s">${fmt(sale / fxC)} $${it.closeSrc === "deal" ? " · по отчёту" : ""}</div></td>
       <td class="num">${fmt(now)}<div class="s">${live ? "в бид " + pp(bid) + "%" : "по сделке"} · ${fmt(sellU)} ₽/шт${thinS ? ` · в стакане ${fmt(bk.bidDepth)} шт` : ""}</div></td>
-      <td class="num ${post > 0 ? "pos" : "flat"}">${post ? fmt(post) : "—"}<div class="s">${post ? fmt(it.coup.postUsd) + " $ · " + it.coup.postN + " выпл." : "выплат не было"}</div></td>
       <td class="num delta ${dR > 0 ? "neg" : dR < 0 ? "pos" : "flat"}">${sgn(dR)}<div class="s">${pct(dP)} · ${dR > 0 ? "упущено" : dR < 0 ? "сэкономлено" : "как продали"}</div></td>
       <td class="num ${dQty > 0 ? "pos" : dQty < 0 ? "neg" : "flat"}">${buy != null ? fmt(buy) + " шт" : "—"}<div class="s">${live ? "с оффера " + pp(ask) + "%" : "по сделке"} · ${fmt(buyU)} ₽/шт${dQty != null ? " · " + sgn(dQty) + " шт к проданным " + fmt(n) : ""}${thinB ? ` · в стакане ${fmt(bk.askDepth)} шт` : ""}</div></td>
     </tr>`;
@@ -549,11 +548,9 @@ function renderWhatIf() {
   $("wiRows").innerHTML = html + `<tr class="tot"><td>Итого<div class="s">${cl.length} закрытых</div></td><td></td>
     <td class="num">${fmt(T.sale)}</td>
     <td class="num">${fmt(T.now)}<div class="s">${fmt(T.now / fx)} $</div></td>
-    <td class="num ${T.post > 0 ? "pos" : "flat"}">${T.post ? fmt(T.post) : "—"}</td>
     <td class="num delta ${dT > 0 ? "neg" : dT < 0 ? "pos" : "flat"}">${sgn(dT)}<div class="s">${pct(dTP)}</div></td>
     <td class="num ${vol > 100 ? "pos" : vol < 100 ? "neg" : "flat"}">${vol != null ? vol.toFixed(1) + "%" : "—"}<div class="s">прежнего объёма на ${fmt(T.sale)} ₽</div></td></tr>`;
   $("wiSum").textContent = `Продано ${cl.length} поз. за ${fmt(T.sale / 1e6, 2)} млн ₽ · сегодня стакан дал бы за них ${fmt(T.now / 1e6, 2)} млн`
-    + (T.post ? ` + ${fmt(T.post / 1e6, 2)} млн купонов` : "")
     + ` → ${dT > 0 ? "упущено" : "сэкономлено"} ${fmt(Math.abs(dT) / 1e6, 2)} млн (${dTP != null ? Math.abs(dTP).toFixed(2) : "—"}%)`
     + (vol != null ? ` · выкуп с офферов обошёлся бы в ${fmt(T.back / 1e6, 2)} млн — на выручку берётся ${vol.toFixed(1)}% прежнего объёма` : "")
     + (T.thin ? ` · по ${T.thin} бумаг(ам) в стакане меньше нужного объёма` : "");
@@ -958,7 +955,7 @@ function bondCardHTML(p) {
     const sellU = bk.sell ?? bk.last ?? mid, buyU = bk.buy ?? bk.last ?? sellU;   // в бид продаём, с оффера откупаем
     const sale = it.cleanRub + it.nkdRub, now = sellU * n, post = it.coup.postRub || 0, diff = now + post - sale;
     const buy = buyU > 0 ? Math.floor(sale / buyU) : null;
-    line3 = `если бы не продал: в бид ${fmt(now)}${post ? ` + ${fmt(post)} купонов` : ""} → <span class="${diff > 0 ? "cneg" : "cpos"}">${sgn(diff)}</span>`
+    line3 = `если бы не продал: в бид ${fmt(now)} → <span class="${diff > 0 ? "cneg" : "cpos"}">${sgn(diff)}</span>`
           + (buy != null ? ` · выкуп с оффера ${fmt(buy)} шт (${sgn(buy - n)}) по ${fmt(buyU)} ₽/шт` : "");
   }
   return `<div class="chart-card${cl ? " closed" : above ? " above" : ""}" id="${id}"><div class="t">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}</div><div class="s">${sub}</div><div class="s">${line2}</div>${line3 ? `<div class="s">${line3}</div>` : ""}${g}</div>`;
