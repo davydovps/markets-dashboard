@@ -157,20 +157,24 @@ svg .area { fill: var(--accent); opacity:.10; }
 <div class="status" id="status"></div>
 
 <div id="whatif" style="display:none">
-  <div class="sect">Если бы не продал<span class="badge">всегда с НКД</span></div>
+  <div class="sect">Если бы не продал<span class="badge">всегда с НКД</span><span class="badge">цены из стакана</span></div>
   <div class="sub" id="wiSum" style="margin-bottom:8px"></div>
   <div class="tw"><table>
   <thead><tr>
-    <th>Бумага</th><th class="num">Цена: продажа → сейчас</th><th class="num">Выручка</th>
-    <th class="num">Стоила бы сейчас</th><th class="num" style="white-space:normal">Купоны после&nbsp;продажи</th>
+    <th>Бумага</th><th class="num" style="white-space:normal">Цена: продажа → бид&nbsp;/&nbsp;оффер</th><th class="num">Выручка</th>
+    <th class="num" style="white-space:normal">Продал бы сейчас за</th><th class="num" style="white-space:normal">Купоны после&nbsp;продажи</th>
     <th class="num">Δ если бы держал</th><th class="num" style="white-space:normal">Выкуп на&nbsp;выручку</th>
   </tr></thead>
   <tbody id="wiRows"></tbody></table></div>
-  <p class="sub" style="max-width:80ch;margin-top:10px">Что было бы, если бы позиции не продавали. «Стоила бы сейчас» — те же бумаги по текущей котировке MOEX, с НКД, по сегодняшнему курсу ЦБ;
-  «купоны после продажи» — выплаты, прошедшие уже после даты продажи. «Δ если бы держал» = стоила&nbsp;бы + купоны − выручка:
+  <p class="sub" style="max-width:80ch;margin-top:10px">Что было бы, если бы позиции не продавали, — сделки эмулируются по стакану, а не по последней сделке:
+  продажа идёт <b>в бид</b>, выкуп — <b>с оффера</b>, так что спред уже учтён. «Продал бы сейчас за» — те же бумаги по лучшему биду, с НКД, по сегодняшнему курсу ЦБ;
+  «купоны после продажи» — выплаты, прошедшие уже после даты продажи. «Δ если бы держал» = продал&nbsp;бы + купоны − выручка:
   <span class="cneg">красное</span> — столько упущено, <span class="cpos">зелёное</span> — столько сэкономлено на продаже.
-  «Выкуп на выручку» — сколько бумаг берётся сегодня на ту же выручку и почём (котировка и рублёвая цена одной бумаги с НКД, без учёта комиссии и налога с прибыли):
-  больше проданного количества — значит откупить сейчас дешевле, чем продали. Всё считается с НКД независимо от галки «НКД».</p>
+  «Выкуп на выручку» — сколько бумаг берётся сегодня на ту же выручку по офферу (рублёвая цена одной бумаги с НКД, без комиссии и налога с прибыли):
+  больше проданного количества — значит откупить сейчас дешевле, чем продали. Всё считается с НКД независимо от галки «НКД».
+  Поуровневый стакан MOEX ISS отдаёт только по подписке, поэтому весь объём считается по лучшей цене; если суммарной глубины стороны
+  (BIDDEPTHT/OFFERDEPTHT) не хватает на нужное количество, это помечено в подстроке — реальная цена была бы хуже. Вне торгов, когда стакан пуст,
+  берётся последняя сделка.</p>
 </div>
 
 <div class="sect">По бумагам</div>
@@ -186,8 +190,11 @@ svg .area { fill: var(--accent); opacity:.10; }
 Δ $ к вложениям — вложения переведены в доллары по курсу ЦБ на дату покупки.
 Позиции — из portfolio.json (перегенерировать: python3 dashboard.py).
 
-Закрытые позиции (поле <code>closed</code> — дата и время продажи по Москве) не переоцениваются: цена берётся на момент продажи
-(10-минутная свеча MOEX за эту минуту, если её нет — закрытие того дня), НКД и номинал — за ту же дату, курс — ЦБ на день продажи.
+Закрытые позиции (поле <code>closed</code>: <code>date</code> — дата и время продажи по Москве, <code>price</code> — реальная сумма сделки в рублях
+(с НКД, как в отчёте брокера), <code>qty</code> — сколько бумаг продано) не переоцениваются. Выручка берётся из <code>price</code> как есть; НКД на дату
+продажи и номинал — из истории MOEX за ту же дату, курс — ЦБ на день продажи, а цена продажи в % номинала считается обратным счётом
+(сумма минус НКД, делённая на номинал × курс) — поэтому она чуть ниже биржевой: комиссия уже внутри. Если <code>price</code> не указан,
+цена восстанавливается по 10-минутной свече MOEX за минуту продажи (если её нет — по закрытию того дня).
 «Сейчас» по такой строке — выручка от продажи, Δ — зафиксированный результат, «Δ ко вчера» по ней всегда пусто, купоны — только до дня продажи,
 будущих купонов и купона в месяц нет. На графике портфеля с момента продажи (пунктирная отметка) позиция входит выручкой, а не котировкой —
 поэтому линия не проваливается; на карточке бумаги линия обрывается в момент продажи.
@@ -199,9 +206,16 @@ svg .area { fill: var(--accent); opacity:.10; }
 <script>
 const EMBEDDED = null;   // локальная версия: позиции зашиты; публичная: null
 const LS_KEY = "markets.positions.v1";
+// closed — {date, price, qty}: дата/время продажи по Москве, реальная сумма сделки (₽, с НКД) и проданное количество.
+// Старый формат — просто строка с датой: суммы нет, цена восстанавливается по свече.
+function normClosed(c) {
+  if (!c) return null;
+  if (typeof c === "string") return {date: c, price: null, qty: null};
+  return {date: c.date, price: c.price != null ? +c.price : null, qty: c.qty != null ? +c.qty : null};
+}
 function normalize(list) {
   return (list || []).map(p => ({secid: p.secid, name: p.name || p.secid, qty: +p.qty, cost_rub: p.cost_rub ?? null,
-    bought: p.bought || null, closed: p.closed || null, lots: (p.lots && p.lots.length) ? p.lots.map(l => ({date: l.date, qty: +l.qty})) : (p.bought ? [{date: p.bought, qty: +p.qty}] : [])}));
+    bought: p.bought || null, closed: normClosed(p.closed), lots: (p.lots && p.lots.length) ? p.lots.map(l => ({date: l.date, qty: +l.qty})) : (p.bought ? [{date: p.bought, qty: +p.qty}] : [])}));
 }
 function fromHash() {
   const m = location.hash.match(/[#&]p=([A-Za-z0-9_-]+)/); if (!m) return null;
@@ -211,7 +225,7 @@ function fromHash() {
 function loadPositions() {
   if (EMBEDDED) return normalize(EMBEDDED);
   const h = fromHash(); if (h && h.length) { try { localStorage.setItem(LS_KEY, JSON.stringify(h)); } catch(e){} return h; }
-  try { const ls = JSON.parse(localStorage.getItem(LS_KEY) || "null"); if (ls && ls.length) return ls; } catch(e){}
+  try { const ls = JSON.parse(localStorage.getItem(LS_KEY) || "null"); if (ls && ls.length) return normalize(ls); } catch(e){}   // normalize: в localStorage мог остаться старый формат closed
   return [];
 }
 let POSITIONS = loadPositions();
@@ -225,11 +239,12 @@ const sgn = (n, d=0) => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + fmt(n, d)
 const pct = n => (n==null || isNaN(n)) ? "—" : (n>0?"+":"") + n.toFixed(2) + "%";
 const short = s => s.replace("Газпром капитал","ГазКап").replace("ЕвразХолдинг Финанс","Евраз").replace("СИБУР Холдинг","СИБУР").replace("Акрон (ПАО)","Акрон").replace("ПОЛЮС","Полюс");
 
-// ---------- закрытые позиции: "YYYY-MM-DD" или "YYYY-MM-DD HH:MM" (МСК) ----------
-const closedDay  = p => p.closed ? p.closed.slice(0,10) : null;
-const closedTime = p => (p.closed && p.closed.length > 10) ? p.closed.slice(11,16) : null;
+// ---------- закрытые позиции: closed.date — "YYYY-MM-DD" или "YYYY-MM-DD HH:MM" (МСК) ----------
+const closedDay  = p => p.closed ? p.closed.date.slice(0,10) : null;
+const closedTime = p => (p.closed && p.closed.date.length > 10) ? p.closed.date.slice(11,16) : null;
 const saleTs = c => Date.parse(c.slice(0,10) + "T" + (c.length > 10 ? c.slice(11,16) : "23:59") + ":00+03:00");
-const closedTs   = p => p.closed ? saleTs(p.closed) : null;
+const closedTs   = p => p.closed ? saleTs(p.closed.date) : null;
+const soldQty    = p => (p.closed && p.closed.qty != null) ? p.closed.qty : p.qty;   // сколько бумаг реально продано
 const closedLbl  = p => p.closed ? closedDay(p).split("-").reverse().join(".") + (closedTime(p) ? " " + closedTime(p) : "") : "";
 
 let state = { mode: "start", withNkd: true, data: null, range: "y" };
@@ -276,7 +291,7 @@ async function couponsReceived(p, cbrRates) {
     if (!c.coupondate || c.value==null) continue;
     if (c.coupondate > until) {
       if (!p.closed) { futUsd += c.value * p.qty; futN++; futLast = c.coupondate; }
-      else if (c.coupondate <= today) { postUsd += c.value * p.qty; postRub += (c.value_rub ?? c.value * cbrRates.today) * p.qty; postN++; }
+      else if (c.coupondate <= today) { const n = soldQty(p); postUsd += c.value * n; postRub += (c.value_rub ?? c.value * cbrRates.today) * n; postN++; }
       continue;
     }
     for (const lot of (p.lots || [])) {
@@ -289,7 +304,7 @@ async function couponsReceived(p, cbrRates) {
 async function closeSnap(p, s) {
   // цена и НКД на момент закрытия позиции: 10-минутная свеча за минуту продажи, иначе закрытие того дня.
   // Данные исторические и больше не меняются — кладём в localStorage, чтобы не дёргать ISS при каждом обновлении.
-  const key = "markets.close.v1:" + p.secid + ":" + p.closed;
+  const key = "markets.close.v1:" + p.secid + ":" + p.closed.date;
   try { const c = JSON.parse(localStorage.getItem(key) || "null"); if (c && c.price != null) return c; } catch (e) {}
   const day = closedDay(p), tm = closedTime(p);
   let price = null, src = "close", acc = null, face = null;
@@ -334,7 +349,7 @@ async function load() {
   try {
     const secids = POSITIONS.map(p=>p.secid).join(",");
     const [moex, cbr] = await Promise.all([
-      getJSON(`${ISS}/engines/stock/markets/bonds/boards/TQCB/securities.json?iss.meta=off&securities=${secids}&securities.columns=SECID,SHORTNAME,PREVPRICE,FACEVALUE,FACEUNIT,COUPONVALUE,COUPONPERCENT,COUPONPERIOD,ACCRUEDINT,NEXTCOUPON,MATDATE&marketdata.columns=SECID,LAST,BID,OFFER,YIELD,UPDATETIME,SYSTIME`),
+      getJSON(`${ISS}/engines/stock/markets/bonds/boards/TQCB/securities.json?iss.meta=off&securities=${secids}&securities.columns=SECID,SHORTNAME,PREVPRICE,FACEVALUE,FACEUNIT,COUPONVALUE,COUPONPERCENT,COUPONPERIOD,ACCRUEDINT,NEXTCOUPON,MATDATE&marketdata.columns=SECID,LAST,BID,OFFER,BIDDEPTHT,OFFERDEPTHT,YIELD,UPDATETIME,SYSTIME`),
       getJSON(`${CBR}/daily_json.js`)
     ]);
     const sec = Object.fromEntries(rows(moex.securities).map(r=>[r.SECID, r]));
@@ -376,12 +391,25 @@ async function load() {
       const cpMonthRub = quasi ? cpMonthUsd * fx : face*(s.COUPONPERCENT||0)/100/12*p.qty;
       const it = {p, s, m, price, src, cleanRub, cleanRubY, nkdRub, nkdRubY, costUsd, buyPct, cpMonthUsd, cpMonthRub, coup: coup[i], quasi};
       it.mkt = {price, src, cleanRub, nkdRub, cpMonthRub, cpMonthUsd};   // рынок сейчас: по закрытой позиции — это «если бы не продал»
+      // стакан: продаём в бид, откупаем с оффера. Уровни книги у MOEX ISS платные — анонимно есть только лучшая цена
+      // и суммарная глубина стороны (BIDDEPTHT/OFFERDEPTHT), поэтому весь объём считается по лучшей цене, а нехватка глубины помечается.
+      const unitRub = q => (face && q != null) ? face * q/100 * k + accRub : null;   // одна бумага с НКД, ₽
+      it.mkt.book = {bid: m.BID ?? null, ask: m.OFFER ?? null, bidDepth: m.BIDDEPTHT ?? null, askDepth: m.OFFERDEPTHT ?? null,
+                     sell: unitRub(m.BID ?? null), buy: unitRub(m.OFFER ?? null), last: unitRub(price)};
       if (p.closed) {                      // позиция закрыта — всё замораживаем на момент продажи
-        const snap = snaps[i] || {}, fxC = fxBought[closedDay(p)] || fx, fc = snap.face || face;
-        it.fxClose = fxC; it.closeSrc = snap.src || null;
-        if (snap.price != null) { it.price = snap.price; it.src = "closed"; }
-        if (snap.price != null && fc) it.cleanRub = fc * snap.price/100 * (quasi ? fxC : 1) * p.qty;
-        if (snap.acc != null) it.nkdRub = snap.acc * p.qty;
+        const snap = snaps[i] || {}, fxC = fxBought[closedDay(p)] || fx, fc = snap.face || face, kC = quasi ? fxC : 1;
+        const n = soldQty(p);
+        it.fxClose = fxC; it.closeSrc = snap.src || null; it.soldQty = n;
+        if (snap.acc != null) it.nkdRub = snap.acc * n;        // НКД на дату продажи — величина расчётная, берём из истории
+        else if (p.closed.price != null) it.nkdRub = 0;        // НКД неизвестен — вся сумма считается чистой
+        if (p.closed.price != null) {        // реальная сумма сделки из portfolio.json (с НКД) — она важнее реконструкции по свече
+          it.cleanRub = p.closed.price - it.nkdRub;
+          it.closeSrc = "deal";
+          if (fc && n) { it.price = it.cleanRub / (fc * kC * n) * 100; it.src = "closed"; }   // фактическая цена продажи, % номинала
+        } else if (snap.price != null) {     // суммы нет — цена по 10-минутной свече за минуту продажи
+          it.price = snap.price; it.src = "closed";
+          if (fc) it.cleanRub = fc * snap.price/100 * kC * n;
+        }
         it.cleanRubY = it.cleanRub; it.nkdRubY = it.nkdRub;    // после продажи цена не движется → Δ за день нулевая
         it.cpMonthUsd = it.cpMonthRub = null;                  // купоны по ней больше не идут
       }
@@ -441,10 +469,10 @@ function render() {
     const above = it.buyPct != null && it.buyPct > 100;
     const frozen = cl && yday;                                  // закрытая позиция за день не двигается
     return `<tr class="${cl ? "closed" : above ? "above" : ""}${ix === firstClosed ? " sep" : ""}">
-      <td class="name">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}<div class="s">${p.qty} шт · ${cl ? "продана " + closedLbl(p) : `до ${s.MATDATE ? s.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${m.YIELD ?? "—"}%${upd}`}</div></td>
-      <td class="num">${it.price!=null ? it.price.toFixed(2)+"%" : "—"}${it.src==="prev" ? '<span class="mark">*</span>' : ""}<div class="s">${cl ? "цена продажи" : `${m.BID!=null ? (+m.BID).toFixed(2) : "—"}&nbsp;/&nbsp;${m.OFFER!=null ? (+m.OFFER).toFixed(2) : "—"}`}</div>${it.buyPct != null ? `<div class="s">куплено&nbsp;${it.buyPct.toFixed(2)}%</div>` : ""}</td>
+      <td class="name">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}<div class="s">${cl ? soldQty(p) : p.qty} шт · ${cl ? "продана " + closedLbl(p) : `до ${s.MATDATE ? s.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${m.YIELD ?? "—"}%${upd}`}</div></td>
+      <td class="num">${it.price!=null ? it.price.toFixed(2)+"%" : "—"}${it.src==="prev" ? '<span class="mark">*</span>' : ""}<div class="s">${cl ? (it.closeSrc === "deal" ? "цена сделки" : "цена по свече") : `${m.BID!=null ? (+m.BID).toFixed(2) : "—"}&nbsp;/&nbsp;${m.OFFER!=null ? (+m.OFFER).toFixed(2) : "—"}`}</div>${it.buyPct != null ? `<div class="s">куплено&nbsp;${it.buyPct.toFixed(2)}%</div>` : ""}</td>
       <td class="num">${p.cost_rub!=null ? fmt(p.cost_rub) : "—"}<div class="s">${it.costUsd!=null ? fmt(it.costUsd)+" $" : ""}</div></td>
-      <td class="num ${cls(p.cost_rub!=null ? it.valRub - p.cost_rub : null)}">${fmt(it.valRub)}<div class="s">${fmt(it.valUsd)} $ · ${cl ? "выручка от продажи" : fmt(it.valRub/p.qty) + " за шт"}</div></td>
+      <td class="num ${cls(p.cost_rub!=null ? it.valRub - p.cost_rub : null)}">${fmt(it.valRub)}<div class="s">${fmt(it.valUsd)} $ · ${cl ? (it.closeSrc === "deal" ? "сумма сделки" : "выручка от продажи") : fmt(it.valRub/p.qty) + " за шт"}</div></td>
       <td class="num ${earned>0 ? "pos" : "flat"}">${earned!=null ? fmt(earned) : "—"}<div class="s">${earned!=null ? fmt(coup.usd) + " $ · " + coup.n + " выпл." + (earnedP!=null ? " · " + earnedP.toFixed(1) + "%" : "") + (cl ? " · до продажи" : "") : (coup.err ? "не загрузилось" : "")}</div></td>
       <td class="num delta ${cls(frozen ? null : dR)}">${frozen ? "—" : sgn(dR)}<div class="s">${frozen ? "закрыта" : pct(dP)}</div></td>
       <td class="num">${cl ? "—" : (futR!=null ? fmt(futR) : "—")}<div class="s">${cl ? "позиция закрыта" : (futR!=null ? fmt(coup.futUsd) + " $ · " + coup.futN + " выпл." : (coup.err ? "не загрузилось" : ""))}</div></td>
@@ -487,39 +515,48 @@ function renderWhatIf() {
   const cl = d.items.filter(x => x.p.closed && x.src === "closed" && x.mkt && x.mkt.price != null);
   if (!cl.length) { box.style.display = "none"; return; }
   box.style.display = "";
-  const T = {sale: 0, now: 0, post: 0, qty: 0};
+  const T = {sale: 0, now: 0, post: 0, qty: 0, back: 0, thin: 0};
+  const pp = v => v != null ? v.toFixed(2) : "—";
   const html = cl.map(it => {
-    const p = it.p, mk = it.mkt;
+    const p = it.p, mk = it.mkt, bk = mk.book || {};
+    const n = it.soldQty ?? p.qty;
     const sale = it.cleanRub + it.nkdRub;          // выручка от продажи — реальные деньги, всегда с НКД
-    const now  = mk.cleanRub + mk.nkdRub;          // столько стоила бы позиция сегодня
     const post = it.coup.postRub || 0;             // купоны, пришедшие уже после продажи
+    // эмуляция сделок по стакану: продали бы в бид, откупаем с оффера. Стакан пуст (вне торгов) — по последней сделке
+    const bid = bk.bid ?? null, ask = bk.ask ?? null, live = bid != null && ask != null;
+    const sellU = bk.sell ?? bk.last ?? (mk.cleanRub + mk.nkdRub) / p.qty;   // ₽ за бумагу с НКД, если продавать
+    const buyU  = bk.buy  ?? bk.last ?? sellU;                              // ₽ за бумагу с НКД, если откупать
+    const now = sellU * n;                         // столько дал бы стакан за те же бумаги сегодня
     const dR = now + post - sale, dP = sale ? dR / sale * 100 : null;
-    const unit = now / p.qty;                      // цена одной бумаги с НКД сегодня, ₽
-    const buy = unit > 0 ? Math.floor(sale / unit) : null, dQty = buy != null ? buy - p.qty : null;
+    const buy = buyU > 0 ? Math.floor(sale / buyU) : null, dQty = buy != null ? buy - n : null;
+    const thinS = bk.bidDepth != null && bk.bidDepth < n;                   // всего в стакане меньше, чем надо продать
+    const thinB = bk.askDepth != null && buy != null && bk.askDepth < buy;   // …или меньше, чем надо откупить
+    if (thinS || thinB) T.thin++;
     const fxC = it.fxClose || fx;
-    T.sale += sale; T.now += now; T.post += post; T.qty += p.qty;
+    T.sale += sale; T.now += now; T.post += post; T.qty += n; T.back += buyU * n;
     return `<tr>
-      <td class="name">${short(p.name)}<div class="s">${fmt(p.qty)} шт · продана ${closedLbl(p)}</div></td>
-      <td class="num">${it.price.toFixed(2)} → ${mk.price.toFixed(2)}%<div class="s">${sgn(mk.price - it.price, 2)} п.п.${it.quasi ? ` · курс ${fxC.toFixed(2)} → ${fx.toFixed(2)}` : ""}</div></td>
-      <td class="num">${fmt(sale)}<div class="s">${fmt(sale / fxC)} $</div></td>
-      <td class="num">${fmt(now)}<div class="s">${fmt(now / fx)} $</div></td>
+      <td class="name">${short(p.name)}<div class="s">${fmt(n)} шт · продана ${closedLbl(p)}</div></td>
+      <td class="num">${it.price.toFixed(2)} → ${live ? `${pp(bid)} / ${pp(ask)}` : pp(mk.price)}%<div class="s">${live ? `бид ${sgn(bid - it.price, 2)} п.п. · спред ${pp(ask - bid)}` : "стакан пуст — по сделке " + sgn(mk.price - it.price, 2) + " п.п."}${it.quasi ? ` · курс ${fxC.toFixed(2)} → ${fx.toFixed(2)}` : ""}</div></td>
+      <td class="num">${fmt(sale)}<div class="s">${fmt(sale / fxC)} $${it.closeSrc === "deal" ? " · по отчёту" : ""}</div></td>
+      <td class="num">${fmt(now)}<div class="s">${live ? "в бид " + pp(bid) + "%" : "по сделке"} · ${fmt(sellU)} ₽/шт${thinS ? ` · в стакане ${fmt(bk.bidDepth)} шт` : ""}</div></td>
       <td class="num ${post > 0 ? "pos" : "flat"}">${post ? fmt(post) : "—"}<div class="s">${post ? fmt(it.coup.postUsd) + " $ · " + it.coup.postN + " выпл." : "выплат не было"}</div></td>
       <td class="num delta ${dR > 0 ? "neg" : dR < 0 ? "pos" : "flat"}">${sgn(dR)}<div class="s">${pct(dP)} · ${dR > 0 ? "упущено" : dR < 0 ? "сэкономлено" : "как продали"}</div></td>
-      <td class="num ${dQty > 0 ? "pos" : dQty < 0 ? "neg" : "flat"}">${buy != null ? fmt(buy) + " шт" : "—"}<div class="s">по ${mk.price.toFixed(2)}% · ${fmt(unit)} ₽/шт${dQty != null ? " · " + sgn(dQty) + " шт к проданным " + fmt(p.qty) : ""}</div></td>
+      <td class="num ${dQty > 0 ? "pos" : dQty < 0 ? "neg" : "flat"}">${buy != null ? fmt(buy) + " шт" : "—"}<div class="s">${live ? "с оффера " + pp(ask) + "%" : "по сделке"} · ${fmt(buyU)} ₽/шт${dQty != null ? " · " + sgn(dQty) + " шт к проданным " + fmt(n) : ""}${thinB ? ` · в стакане ${fmt(bk.askDepth)} шт` : ""}</div></td>
     </tr>`;
   }).join("");
   const dT = T.now + T.post - T.sale, dTP = T.sale ? dT / T.sale * 100 : null;
-  const vol = T.now ? T.sale / T.now * 100 : null;   // сколько прежнего объёма берётся на выручку
+  const vol = T.back ? T.sale / T.back * 100 : null;   // сколько прежнего объёма берётся на выручку по офферам
   $("wiRows").innerHTML = html + `<tr class="tot"><td>Итого<div class="s">${cl.length} закрытых</div></td><td></td>
     <td class="num">${fmt(T.sale)}</td>
     <td class="num">${fmt(T.now)}<div class="s">${fmt(T.now / fx)} $</div></td>
     <td class="num ${T.post > 0 ? "pos" : "flat"}">${T.post ? fmt(T.post) : "—"}</td>
     <td class="num delta ${dT > 0 ? "neg" : dT < 0 ? "pos" : "flat"}">${sgn(dT)}<div class="s">${pct(dTP)}</div></td>
     <td class="num ${vol > 100 ? "pos" : vol < 100 ? "neg" : "flat"}">${vol != null ? vol.toFixed(1) + "%" : "—"}<div class="s">прежнего объёма на ${fmt(T.sale)} ₽</div></td></tr>`;
-  $("wiSum").textContent = `Продано ${cl.length} поз. за ${fmt(T.sale / 1e6, 2)} млн ₽ · сегодня те же бумаги стоили бы ${fmt(T.now / 1e6, 2)} млн`
+  $("wiSum").textContent = `Продано ${cl.length} поз. за ${fmt(T.sale / 1e6, 2)} млн ₽ · сегодня стакан дал бы за них ${fmt(T.now / 1e6, 2)} млн`
     + (T.post ? ` + ${fmt(T.post / 1e6, 2)} млн купонов` : "")
     + ` → ${dT > 0 ? "упущено" : "сэкономлено"} ${fmt(Math.abs(dT) / 1e6, 2)} млн (${dTP != null ? Math.abs(dTP).toFixed(2) : "—"}%)`
-    + (vol != null ? ` · на выручку сейчас берётся ${vol.toFixed(1)}% прежнего объёма` : "");
+    + (vol != null ? ` · выкуп с офферов обошёлся бы в ${fmt(T.back / 1e6, 2)} млн — на выручку берётся ${vol.toFixed(1)}% прежнего объёма` : "")
+    + (T.thin ? ` · по ${T.thin} бумаг(ам) в стакане меньше нужного объёма` : "");
 }
 
 function renderFx() {
@@ -752,7 +789,7 @@ function drawChart() {
   for (const tk of xTicks(t0, t1)) g += `<text class="tick" x="${X(tk.t).toFixed(1)}" y="${H-8}" text-anchor="middle">${tk.label}</text>`;
   g += `<line class="axis" x1="${pl}" x2="${W-pr}" y1="${H-pb}" y2="${H-pb}"/>`;
   // отметки продаж: с этого момента позиция входит в линию выручкой
-  const sales = [...new Set(POSITIONS.filter(q => q.closed).map(q => q.closed))]
+  const sales = [...new Set(POSITIONS.filter(q => q.closed).map(q => q.closed.date))]
     .map(c => ({t: day ? saleTs(c) : Date.parse(c.slice(0,10)), c}))     // на дневном масштабе точки стоят на дате, а не на минуте
     .filter(x => x.t >= t0 && x.t <= t1).sort((a, b) => a.t - b.t);
   sales.forEach((x, i) => {
@@ -910,17 +947,19 @@ function bondCardHTML(p) {
   const scale = cl ? `${day ? dmyDay + " внутри дня" : "до продажи"}${gpts.length ? " · пунктир — если бы не продал" : ""}`
               : day ? `${dmyDay} внутри дня` : RANGE_LBL[state.range];
   const held = cl && p.lots && p.lots.length ? Math.round((closedTs(p) - Date.parse(p.lots.map(l => l.date).sort()[0])) / 864e5) : null;
-  const sub = `${p.qty} шт · куплено ${bought}${buyTxt} · ${cl ? `продана ${closedLbl(p)}${held != null ? ` · в портфеле ${held} дн.` : ""}`
+  const sub = `${cl ? soldQty(p) : p.qty} шт · куплено ${bought}${buyTxt} · ${cl ? `продана ${closedLbl(p)}${held != null ? ` · в портфеле ${held} дн.` : ""}`
     : `до ${sec.MATDATE ? sec.MATDATE.split("-").reverse().join(".") : "—"} · YTM ${mrow.YIELD ?? "—"}%`} · ${scale}, млн ₽${fxVary ? " (левая ось), курс ЦБ (правая)" : ""}`;
   const line2 = (cost != null && nowV != null)
     ? `вложено ${fmt(cost)} ${cl ? "→ продана за" : "→"} ${fmt(nowV)} (<span class="${dR >= 0 ? "cpos" : "cneg"}">${sgn(dR)}</span>${nkd ? "" : ", без НКД"}) · купоны ${coup.rub != null ? fmt(coup.rub) : "—"}${cl && coup.rub != null && dR != null ? ` · итог ${sgn(dR + coup.rub)}` : ""}` : "";
   // «если бы не продал» — по факту сегодня: сколько стоила бы позиция и сколько бумаг берётся обратно на выручку
   let line3 = "";
   if (cl && it && it.src === "closed" && it.mkt && it.mkt.price != null) {
-    const sale = it.cleanRub + it.nkdRub, now = it.mkt.cleanRub + it.mkt.nkdRub, post = it.coup.postRub || 0, diff = now + post - sale;
-    const buy = now > 0 ? Math.floor(sale / (now / p.qty)) : null;
-    line3 = `если бы не продал: сейчас ${fmt(now)}${post ? ` + ${fmt(post)} купонов` : ""} → <span class="${diff > 0 ? "cneg" : "cpos"}">${sgn(diff)}</span>`
-          + (buy != null ? ` · выкуп ${fmt(buy)} шт (${sgn(buy - p.qty)}) по ${fmt(now / p.qty)} ₽/шт` : "");
+    const bk = it.mkt.book || {}, mid = (it.mkt.cleanRub + it.mkt.nkdRub) / p.qty, n = it.soldQty ?? p.qty;
+    const sellU = bk.sell ?? bk.last ?? mid, buyU = bk.buy ?? bk.last ?? sellU;   // в бид продаём, с оффера откупаем
+    const sale = it.cleanRub + it.nkdRub, now = sellU * n, post = it.coup.postRub || 0, diff = now + post - sale;
+    const buy = buyU > 0 ? Math.floor(sale / buyU) : null;
+    line3 = `если бы не продал: в бид ${fmt(now)}${post ? ` + ${fmt(post)} купонов` : ""} → <span class="${diff > 0 ? "cneg" : "cpos"}">${sgn(diff)}</span>`
+          + (buy != null ? ` · выкуп с оффера ${fmt(buy)} шт (${sgn(buy - n)}) по ${fmt(buyU)} ₽/шт` : "");
   }
   return `<div class="chart-card${cl ? " closed" : above ? " above" : ""}" id="${id}"><div class="t">${short(p.name)}${cl ? '<span class="badge">закрыта</span>' : ""}</div><div class="s">${sub}</div><div class="s">${line2}</div>${line3 ? `<div class="s">${line3}</div>` : ""}${g}</div>`;
 }
